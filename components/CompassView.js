@@ -13,6 +13,8 @@ import Vastu16Compass from './compassModes/Vastu16Compass';
 import Vastu32Compass from './compassModes/Vastu32Compass';
 import Vastu45Compass from './compassModes/Vastu45Compass';
 import ChakraCompass from './compassModes/ChakraCompass';
+import ClassicCompass from './compassModes/ClassicCompass';
+import FengShuiCompass from './compassModes/FengShuiCompass';
 
 // Get dimensions safely
 const getDimensions = () => {
@@ -80,7 +82,7 @@ const getResponsiveFont = (size) => {
   return Math.max(size * scale, size * 0.85);
 };
 
-export default function CompassView({ mode, capturedImage, onClearImage, onHeadingChange, onImageSizeChange, initialRotation }) {
+export default function CompassView({ mode, compassType, capturedImage, onClearImage, onHeadingChange, onImageSizeChange, initialRotation }) {
   const [heading, setHeading] = useState(0);
   const [imageContainerSize, setImageContainerSize] = useState(COMPASS_SIZE); // Start at 100%
   const rotation = useSharedValue(0);
@@ -106,8 +108,8 @@ export default function CompassView({ mode, capturedImage, onClearImage, onHeadi
     // If accelerometer data is not available or invalid, fall back to 2D calculation
     if (accelMagnitude < 0.1) {
       // Fallback to 2D compass (using only X and Y from magnetometer)
-      // Swap X and Y for correct orientation: 0° = North
-      let heading = Math.atan2(mx, my) * (180 / Math.PI);
+      // Use -X and Y for correct orientation: 0° = North
+      let heading = Math.atan2(-mx, my) * (180 / Math.PI);
       return (heading + 360) % 360;
     }
 
@@ -130,9 +132,9 @@ export default function CompassView({ mode, capturedImage, onClearImage, onHeadi
     const compensatedY = mx * sinRoll * sinPitch + my * cosRoll - mz * sinRoll * cosPitch;
 
     // Calculate heading from tilt-compensated values
-    // Note: We use atan2(compensatedX, compensatedY) to get correct orientation
+    // Note: We use atan2(-compensatedX, compensatedY) to get correct orientation
     // This gives us 0° = North, 90° = East, 180° = South, 270° = West
-    let heading = Math.atan2(compensatedX, compensatedY) * (180 / Math.PI);
+    let heading = Math.atan2(-compensatedX, compensatedY) * (180 / Math.PI);
     
     // Normalize to 0-360 degrees
     heading = (heading + 360) % 360;
@@ -307,8 +309,8 @@ export default function CompassView({ mode, capturedImage, onClearImage, onHeadi
                 const { x, y, z } = data;
                 magnetometerData.current = { x, y, z };
                 // Fallback to 2D calculation if accelerometer not available
-              // Swap x and y for correct orientation
-              let angle = Math.atan2(x, y) * (180 / Math.PI);
+              // Calculate heading - use -x and y for correct orientation
+              let angle = Math.atan2(-x, y) * (180 / Math.PI);
               angle = (angle + 360) % 360;
               setHeading(angle);
               rotation.value = withSpring(-angle, { damping: 15, stiffness: 100 });
@@ -324,8 +326,8 @@ export default function CompassView({ mode, capturedImage, onClearImage, onHeadi
           magnetometerSubscription = Magnetometer.addListener((data) => {
             const { x, y, z } = data;
             magnetometerData.current = { x: x || 0, y: y || 0, z: z || 0 };
-          // Swap x and y for correct orientation
-          let angle = Math.atan2(x, y) * (180 / Math.PI);
+          // Calculate heading - use -x and y for correct orientation
+          let angle = Math.atan2(-x, y) * (180 / Math.PI);
           angle = (angle + 360) % 360;
           setHeading(angle);
           rotation.value = withSpring(-angle, { damping: 15, stiffness: 100 });
@@ -360,6 +362,14 @@ export default function CompassView({ mode, capturedImage, onClearImage, onHeadi
   });
 
   const renderCompass = () => {
+    // Handle different compass types
+    if (compassType === 'classic') {
+      return <ClassicCompass heading={heading} />;
+    } else if (compassType === 'fengshui') {
+      return <FengShuiCompass heading={heading} />;
+    }
+    
+    // For Vastu type, use the mode to determine which Vastu compass
     switch (mode) {
       case 'normal':
         return <NormalCompass size={COMPASS_SIZE} />;
@@ -547,9 +557,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '900',
     lineHeight: 16,
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    textShadow: '0px 1px 2px rgba(0, 0, 0, 0.5)',
   },
   imageControls: {
     position: 'absolute',

@@ -159,7 +159,7 @@ function CompassCard({ compass, onPress, delay = 0 }) {
   );
 }
 
-export default function HomeScreen({ onSelectCompass, onServicePress }) {
+export default function HomeScreen({ onSelectCompass, onServicePress, compassType, onCompassTypeChange }) {
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [showHowToUse, setShowHowToUse] = useState(false);
   const headerOpacity = useSharedValue(0);
@@ -206,7 +206,7 @@ export default function HomeScreen({ onSelectCompass, onServicePress }) {
                 </TouchableOpacity>
                 <View style={styles.headerTitleContainer}>
                   <CompassIcon size={getResponsiveSize(18)} color="#FFFFFF" />
-                  <Text style={styles.headerTitle}>Compass By Applied</Text>
+                  <Text style={styles.headerTitle}>Compass - Vastu</Text>
                 </View>
                 <View style={styles.headerSpacer} />
               </View>
@@ -253,6 +253,8 @@ export default function HomeScreen({ onSelectCompass, onServicePress }) {
         visible={sidebarVisible}
         onClose={() => setSidebarVisible(false)}
         onShowHowToUse={() => setShowHowToUse(true)}
+        compassType={compassType}
+        onCompassTypeChange={onCompassTypeChange}
       />
 
       {/* How to Use Modal */}
@@ -381,9 +383,7 @@ const styles = StyleSheet.create({
     fontSize: getResponsiveFont(15),
     fontWeight: '700',
     color: '#FFFFFF',
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)',
     letterSpacing: 0.5,
   },
   headerSpacer: {

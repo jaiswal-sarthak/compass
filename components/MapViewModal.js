@@ -68,10 +68,13 @@ const getResponsiveFont = (size) => {
   return Math.max(size * scale, size * 0.85);
 };
 
-export default function MapViewModal({ visible, onClose, mode, selectedLocation }) {
+export default function MapViewModal({ visible, onClose, mode, compassType, selectedLocation }) {
   const [currentLocation, setCurrentLocation] = useState(null);
   const [heading, setHeading] = useState(0);
   const [loading, setLoading] = useState(true);
+  
+  // Use Classic Compass as default fallback if no compass type specified
+  const effectiveCompassType = compassType || 'classic';
   const [mapType, setMapType] = useState('satellite');
   const [showLocationSearch, setShowLocationSearch] = useState(false);
   const [mapLocation, setMapLocation] = useState(null);
@@ -476,6 +479,7 @@ export default function MapViewModal({ visible, onClose, mode, selectedLocation 
           <View style={[styles.compassOverlay, { pointerEvents: 'none', zIndex: 500, opacity: 0.6 }]}>
             <CompassView
               mode={mode}
+              compassType={effectiveCompassType}
               capturedImage={null}
               onClearImage={() => {}}
               onHeadingChange={setHeading}

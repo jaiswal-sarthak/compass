@@ -119,8 +119,16 @@ const COMPASS_MODES = {
   CHAKRA: 'chakra',
 };
 
+const COMPASS_TYPES = {
+  CLASSIC: 'classic',
+  FENGSHUI: 'fengshui',
+  VASTU: 'vastu',
+  MAP: 'map',
+};
+
 export default function App() {
   const [showHomeScreen, setShowHomeScreen] = useState(true);
+  const [compassType, setCompassType] = useState(COMPASS_TYPES.VASTU); // Default to Vastu
   const [currentMode, setCurrentMode] = useState(COMPASS_MODES.NORMAL);
   const [showCamera, setShowCamera] = useState(false);
   const [capturedImage, setCapturedImage] = useState(null);
@@ -154,6 +162,10 @@ export default function App() {
       });
     } else {
       setIsLoading(false);
+      // Close sidebar and modals when going to home screen
+      setSidebarVisible(false);
+      setShowLocationSearch(false);
+      setShowMapView(false);
     }
   }, [showHomeScreen]);
 
@@ -197,6 +209,8 @@ export default function App() {
     };
     
     if (modeMap[compassId]) {
+      // Make sure we're in Vastu compass type when selecting Vastu modes
+      setCompassType(COMPASS_TYPES.VASTU);
       setCurrentMode(modeMap[compassId]);
       setShowHomeScreen(false);
       setIsLoading(true);
@@ -216,18 +230,92 @@ export default function App() {
     setIsLoading(false);
   };
 
+  const handleCompassTypeChange = (type) => {
+    // Close sidebar first
+    setSidebarVisible(false);
+    
+    // Update compass type
+    setCompassType(type);
+    
+    // Handle different compass types
+    if (type === COMPASS_TYPES.MAP) {
+      // Open map view directly - now works from any screen
+      // Classic compass will be used as default if no compass type is set
+      setShowMapView(true);
+    } else if (type === COMPASS_TYPES.CLASSIC || type === COMPASS_TYPES.FENGSHUI) {
+      // For Classic and Feng Shui, set mode to normal (they don't use mode variations)
+      setCurrentMode(COMPASS_MODES.NORMAL);
+      
+      // Go directly to compass screen for these types
+      setShowHomeScreen(false);
+      
+      // If already in compass view, trigger a reload animation
+      if (!showHomeScreen) {
+        setIsLoading(true);
+        menuVisible.value = 0;
+        compassInitialRotation.value = 0;
+        
+        // Reset and restart animation
+        setTimeout(() => {
+          compassInitialRotation.value = withTiming(360, {
+            duration: 800,
+            easing: Easing.out(Easing.cubic),
+          }, (finished) => {
+            if (finished) {
+              setTimeout(() => {
+                setIsLoading(false);
+                menuVisible.value = withSpring(1, { damping: 15, stiffness: 100 });
+              }, 300);
+            }
+          });
+        }, 100);
+      } else {
+        // Coming from home screen
+        setShowHomeScreen(false);
+        setIsLoading(true);
+        menuVisible.value = 0;
+      }
+    } else if (type === COMPASS_TYPES.VASTU) {
+      // Show home screen to let user select Vastu zone type
+      setShowHomeScreen(true);
+      setIsLoading(false);
+    }
+  };
+
   // Show HomeScreen first
   if (showHomeScreen) {
     return (
+      <>
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor="#2C2C2C" />
         <View style={styles.webContainer}>
           <HomeScreen
             onSelectCompass={handleCompassSelect}
             onServicePress={handleServicePress}
+              compassType={compassType}
+              onCompassTypeChange={handleCompassTypeChange}
           />
         </View>
       </SafeAreaView>
+
+        {/* Map View Modal - available from home screen */}
+        <MapViewModal
+          visible={showMapView}
+          onClose={() => setShowMapView(false)}
+          mode={currentMode}
+          compassType={compassType}
+          selectedLocation={selectedLocation}
+        />
+
+        {/* Sidebar - available from home screen */}
+        <Sidebar
+          visible={sidebarVisible}
+          onClose={() => setSidebarVisible(false)}
+          onShowHowToUse={() => setShowHowToUse(true)}
+          compassType={compassType}
+          onCompassTypeChange={handleCompassTypeChange}
+        />
+      </>
     );
   }
 
@@ -280,6 +368,7 @@ export default function App() {
         <View style={styles.compassContainer}>
               <CompassView 
                 mode={currentMode} 
+                compassType={compassType}
                 capturedImage={null}
                 onClearImage={() => {}}
                 onHeadingChange={setHeading}
@@ -351,6 +440,7 @@ export default function App() {
               visible={showMapView}
               onClose={() => setShowMapView(false)}
               mode={currentMode}
+              compassType={compassType}
               selectedLocation={selectedLocation}
             />
           </View>
@@ -362,6 +452,8 @@ export default function App() {
         visible={sidebarVisible}
         onClose={() => setSidebarVisible(false)}
         onShowHowToUse={() => setShowHowToUse(true)}
+        compassType={compassType}
+        onCompassTypeChange={handleCompassTypeChange}
       />
 
       {/* How to Use Modal */}
@@ -573,9 +665,7 @@ const styles = StyleSheet.create({
     fontSize: getButtonFontSize(getResponsiveFont(13)), // Reduced from 14
     fontWeight: '700',
     letterSpacing: 0.5, // Reduced from 0.8
-    textShadowColor: 'rgba(0, 0, 0, 0.2)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    textShadow: '0px 1px 2px rgba(0, 0, 0, 0.2)',
     flexShrink: 1, // Allow text to shrink if needed
   },
   backButtonContainer: {
@@ -614,9 +704,7 @@ const styles = StyleSheet.create({
     fontSize: getResponsiveFont(13),
     fontWeight: '700',
     letterSpacing: 0.5,
-    textShadowColor: 'rgba(0, 0, 0, 0.2)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    textShadow: '0px 1px 2px rgba(0, 0, 0, 0.2)',
   },
   modalOverlay: {
     flex: 1,

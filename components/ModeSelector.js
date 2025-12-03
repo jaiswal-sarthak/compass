@@ -194,9 +194,7 @@ const styles = StyleSheet.create({
     fontSize: getResponsiveFont(11),
     fontWeight: '700',
     letterSpacing: 0.8,
-    textShadowColor: 'rgba(0, 0, 0, 0.2)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    textShadow: '0px 1px 2px rgba(0, 0, 0, 0.2)',
   },
   inactiveLabel: {
     color: '#8B7355',

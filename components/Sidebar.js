@@ -14,9 +14,11 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
   withSpring,
+  Easing,
 } from 'react-native-reanimated';
 import * as Sharing from 'expo-sharing';
 import { Linking } from 'react-native';
+import Svg, { Path, Circle, G } from 'react-native-svg';
 
 // Get dimensions safely
 const getDimensions = () => {
@@ -56,7 +58,63 @@ const getResponsiveFont = (size) => {
   return Math.max(size * scale, size * 0.85);
 };
 
-function MenuItem({ title, onPress, delay = 0 }) {
+// Icon Components
+const ClassicCompassIcon = ({ size = 20, color = "#2C2C2C" }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth="2" />
+    <Path d="M12 2L14 10L12 12L10 10L12 2Z" fill="#DC143C" stroke={color} strokeWidth="1" />
+    <Path d="M12 22L14 14L12 12L10 14L12 22Z" fill="#999999" stroke={color} strokeWidth="1" />
+  </Svg>
+);
+
+const YinYangIcon = ({ size = 20, color = "#2C2C2C" }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth="2" fill="none" />
+    <Path d="M12 2 A10 10 0 0 1 12 22 A5 5 0 0 1 12 12 A5 5 0 0 0 12 2" fill={color} />
+    <Circle cx="12" cy="7" r="1.5" fill="#FFFFFF" />
+    <Circle cx="12" cy="17" r="1.5" fill={color} />
+  </Svg>
+);
+
+const VastuIcon = ({ size = 20, color = "#2C2C2C" }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M12 2C10.5 3.5 10 5 10 7C10 9 11 10 12 10C13 10 14 9 14 7C14 5 13.5 3.5 12 2Z" fill={color} />
+    <Circle cx="12" cy="12" r="2" fill={color} />
+    <Path d="M6 8C4 10 4 12 6 14M18 8C20 10 20 12 18 14M8 18C10 20 14 20 16 18" stroke={color} strokeWidth="1.5" strokeLinecap="round" />
+  </Svg>
+);
+
+const MapIcon = ({ size = 20, color = "#2C2C2C" }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M3 6L9 3L15 6L21 3V18L15 21L9 18L3 21V6Z" stroke={color} strokeWidth="2" strokeLinejoin="round" fill="none" />
+    <Path d="M9 3V18M15 6V21" stroke={color} strokeWidth="2" />
+  </Svg>
+);
+
+const ShareIcon = ({ size = 20, color = "#2C2C2C" }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Circle cx="18" cy="5" r="3" stroke={color} strokeWidth="2" fill="none" />
+    <Circle cx="6" cy="12" r="3" stroke={color} strokeWidth="2" fill="none" />
+    <Circle cx="18" cy="19" r="3" stroke={color} strokeWidth="2" fill="none" />
+    <Path d="M8.5 13.5L15.5 17.5M8.5 10.5L15.5 6.5" stroke={color} strokeWidth="2" />
+  </Svg>
+);
+
+const SettingsIcon = ({ size = 20, color = "#2C2C2C" }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="12" r="3" stroke={color} strokeWidth="2" fill="none" />
+    <Path d="M12 1V3M12 21V23M4.22 4.22L5.64 5.64M18.36 18.36L19.78 19.78M1 12H3M21 12H23M4.22 19.78L5.64 18.36M18.36 5.64L19.78 4.22" stroke={color} strokeWidth="2" strokeLinecap="round" />
+  </Svg>
+);
+
+const InfoIcon = ({ size = 20, color = "#2C2C2C" }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth="2" fill="none" />
+    <Path d="M12 16V12M12 8H12.01" stroke={color} strokeWidth="2" strokeLinecap="round" />
+  </Svg>
+);
+
+function MenuItem({ title, onPress, icon, isActive }) {
   const [isPressed, setIsPressed] = useState(false);
   const scale = useSharedValue(1);
   const backgroundColor = useSharedValue(0);
@@ -83,7 +141,7 @@ function MenuItem({ title, onPress, delay = 0 }) {
 
   return (
     <TouchableOpacity
-      style={styles.menuItem}
+      style={[styles.menuItem, isActive && styles.menuItemActive]}
       onPress={onPress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
@@ -91,18 +149,27 @@ function MenuItem({ title, onPress, delay = 0 }) {
     >
       <Animated.View style={[styles.menuItemContent, animatedStyle]}>
         <Animated.View style={[styles.menuItemBackground, backgroundStyle]} />
-        <Text style={styles.menuItemText}>{title}</Text>
+        {icon && <View style={styles.menuItemIcon}>{icon}</View>}
+        <Text style={[styles.menuItemText, isActive && styles.menuItemTextActive]}>{title}</Text>
       </Animated.View>
     </TouchableOpacity>
   );
 }
 
-export default function Sidebar({ visible, onClose, onShowHowToUse }) {
+export default function Sidebar({ visible, onClose, onShowHowToUse, compassType, onCompassTypeChange }) {
   const translateX = useSharedValue(-getDimensions().width * 0.75);
+  const hasOpenedOnce = React.useRef(false);
 
   React.useEffect(() => {
     if (visible) {
+      if (!hasOpenedOnce.current) {
+        // First time opening - use bounce animation
       translateX.value = withSpring(0, { damping: 15, stiffness: 100 });
+        hasOpenedOnce.current = true;
+      } else {
+        // Subsequent opens - smooth slide
+        translateX.value = withTiming(0, { duration: 300, easing: Easing.out(Easing.cubic) });
+      }
     } else {
       translateX.value = withTiming(-getDimensions().width * 0.75, { duration: 300 });
     }
@@ -113,7 +180,7 @@ export default function Sidebar({ visible, onClose, onShowHowToUse }) {
   }));
 
   const overlayStyle = useAnimatedStyle(() => ({
-    opacity: visible ? withTiming(1, { duration: 300 }) : withTiming(0, { duration: 300 }),
+    opacity: visible ? withTiming(1, { duration: 250 }) : withTiming(0, { duration: 250 }),
   }));
 
   const handleShareApp = async () => {
@@ -191,21 +258,65 @@ export default function Sidebar({ visible, onClose, onShowHowToUse }) {
           </View>
 
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+            {/* Compass Types Section */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Compass Types</Text>
+              <MenuItem
+                title="Classic Compass"
+                icon={<ClassicCompassIcon size={getResponsiveSize(20)} color={compassType === 'classic' ? "#B8860B" : "#2C2C2C"} />}
+                onPress={() => {
+                  onCompassTypeChange('classic');
+                }}
+                isActive={compassType === 'classic'}
+              />
+              <MenuItem
+                title="Feng Shui Compass"
+                icon={<YinYangIcon size={getResponsiveSize(20)} color={compassType === 'fengshui' ? "#B8860B" : "#2C2C2C"} />}
+                onPress={() => {
+                  onCompassTypeChange('fengshui');
+                }}
+                isActive={compassType === 'fengshui'}
+              />
+              <MenuItem
+                title="Vastu Compass"
+                icon={<VastuIcon size={getResponsiveSize(20)} color={compassType === 'vastu' ? "#B8860B" : "#2C2C2C"} />}
+                onPress={() => {
+                  onCompassTypeChange('vastu');
+                }}
+                isActive={compassType === 'vastu'}
+              />
+              <MenuItem
+                title="Map Compass"
+                icon={<MapIcon size={getResponsiveSize(20)} color={compassType === 'map' ? "#B8860B" : "#2C2C2C"} />}
+                onPress={() => {
+                  onCompassTypeChange('map');
+                }}
+                isActive={compassType === 'map'}
+              />
+            </View>
+
+            {/* Divider */}
+            <View style={styles.divider} />
+
+            {/* Settings Section */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Settings</Text>
             <MenuItem
               title="Share App"
+                icon={<ShareIcon size={getResponsiveSize(20)} color="#2C2C2C" />}
               onPress={handleShareApp}
-              delay={0}
             />
             <MenuItem
               title="Manage Permissions"
+                icon={<SettingsIcon size={getResponsiveSize(20)} color="#2C2C2C" />}
               onPress={handleManagePermissions}
-              delay={50}
             />
             <MenuItem
               title="How to Use Vastu Compass"
+                icon={<InfoIcon size={getResponsiveSize(20)} color="#2C2C2C" />}
               onPress={handleHowToUse}
-              delay={100}
             />
+            </View>
           </ScrollView>
         </View>
       </Animated.View>
@@ -278,17 +389,43 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingTop: getResponsiveSize(8),
   },
+  section: {
+    marginBottom: getResponsiveSize(4),
+  },
+  sectionTitle: {
+    fontSize: getResponsiveFont(12),
+    fontWeight: '700',
+    color: '#8B7355',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    paddingHorizontal: getResponsiveSize(20),
+    paddingTop: getResponsiveSize(12),
+    paddingBottom: getResponsiveSize(6),
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#E0E0E0',
+    marginVertical: getResponsiveSize(8),
+    marginHorizontal: getResponsiveSize(20),
+  },
   menuItem: {
     marginHorizontal: getResponsiveSize(12),
-    marginBottom: getResponsiveSize(4),
+    marginBottom: getResponsiveSize(2),
     borderRadius: getResponsiveSize(8),
     overflow: 'hidden',
   },
+  menuItemActive: {
+    backgroundColor: '#FFF8E1',
+    borderWidth: 1,
+    borderColor: '#F4C430',
+  },
   menuItemContent: {
-    paddingVertical: getResponsiveSize(14),
+    paddingVertical: getResponsiveSize(10),
     paddingHorizontal: getResponsiveSize(16),
     position: 'relative',
     overflow: 'hidden',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   menuItemBackground: {
     position: 'absolute',
@@ -298,11 +435,24 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: '#FFF8E1',
   },
+  menuItemIcon: {
+    marginRight: getResponsiveSize(12),
+    position: 'relative',
+    zIndex: 1,
+    width: getResponsiveSize(20),
+    height: getResponsiveSize(20),
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   menuItemText: {
     fontSize: getResponsiveFont(14),
     fontWeight: '500',
     color: '#2C2C2C',
     position: 'relative',
     zIndex: 1,
+  },
+  menuItemTextActive: {
+    color: '#B8860B',
+    fontWeight: '700',
   },
 });
