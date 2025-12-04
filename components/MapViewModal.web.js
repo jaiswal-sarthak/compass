@@ -30,11 +30,19 @@ import {
   createGridLinesXY,
   getCellCenterXY,
   getCellCornersXY,
+  create3LayerGridXY,
+  interpolate,
 } from '../utils/mapUtils';
 import {
   VASTU_GRID_9X9,
   getBrahmasthanCells,
 } from '../utils/vastuGrid';
+import {
+  OUTER_LAYER,
+  MIDDLE_LAYER,
+  CENTER_LAYER,
+  getAll45Devtas,
+} from '../utils/vastuGrid45';
 
 const getDimensions = () => {
   try {
@@ -82,10 +90,13 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
   const [plotCorners, setPlotCorners] = useState([]);
   const [cornerSelectionMode, setCornerSelectionMode] = useState(false);
   const [showVastuGrid, setShowVastuGrid] = useState(false);
-  const [showDevtaLabels, setShowDevtaLabels] = useState(true);
-  const [highlightBrahmasthan, setHighlightBrahmasthan] = useState(true);
   const [showCornerBanner, setShowCornerBanner] = useState(true);
   const [showGridBanner, setShowGridBanner] = useState(true);
+  
+  // 3 LAYER TOGGLES
+  const [showOuterLayer, setShowOuterLayer] = useState(true);
+  const [showMiddleLayer, setShowMiddleLayer] = useState(true);
+  const [showCenterLayer, setShowCenterLayer] = useState(true);
   const gridLayersRef = useRef([]);
   const plotCornersRef = useRef([]);
   const cornerSelectionModeRef = useRef(false);
@@ -251,37 +262,84 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
       }).addTo(googleMapRef.current);
       gridLayersRef.current.push(outline);
       
-      // 2. Draw main grid lines (golden)
-      verticalLines.forEach((line, idx) => {
-        const latLngs = line.map(p => {
+      // 2. Draw 3-LAYER GRID (divide by 3)
+      const [BL, BR, TR, TL] = rectXY;
+      const divisions = [0, 1/3, 2/3, 1];
+      
+      // Draw main 3x3 division lines (THICK GOLDEN)
+      divisions.forEach((t, idx) => {
+        // Vertical lines
+        const bottomPoint = interpolate(BL, BR, t);
+        const topPoint = interpolate(TL, TR, t);
+        const vertLatLngs = [bottomPoint, topPoint].map(p => {
           const coord = xyToLatLng(center, p.x, p.y);
           return [coord.latitude, coord.longitude];
         });
-        const isBorder = idx === 0 || idx === 9;
-        const polyline = window.L.polyline(latLngs, {
-          color: isBorder ? '#FFD700' : '#F4C430',
-          weight: isBorder ? 3 : 1.5,
-          opacity: isBorder ? 1 : 0.7,
+        const isMainBorder = idx === 0 || idx === 3;
+        const isLayerBorder = idx === 1 || idx === 2;
+        window.L.polyline(vertLatLngs, {
+          color: isMainBorder ? '#FFD700' : '#F4C430',
+          weight: isMainBorder ? 5 : (isLayerBorder ? 3 : 2),
+          opacity: isMainBorder ? 1 : 0.85,
         }).addTo(googleMapRef.current);
-        gridLayersRef.current.push(polyline);
-      });
-      
-      horizontalLines.forEach((line, idx) => {
-        const latLngs = line.map(p => {
+        
+        // Horizontal lines
+        const leftPoint = interpolate(BL, TL, t);
+        const rightPoint = interpolate(BR, TR, t);
+        const horizLatLngs = [leftPoint, rightPoint].map(p => {
           const coord = xyToLatLng(center, p.x, p.y);
           return [coord.latitude, coord.longitude];
         });
-        const isBorder = idx === 0 || idx === 9;
-        const polyline = window.L.polyline(latLngs, {
-          color: isBorder ? '#FFD700' : '#F4C430',
-          weight: isBorder ? 3 : 1.5,
-          opacity: isBorder ? 1 : 0.7,
+        const hLine = window.L.polyline(horizLatLngs, {
+          color: isMainBorder ? '#FFD700' : '#F4C430',
+          weight: isMainBorder ? 5 : (isLayerBorder ? 3 : 2),
+          opacity: isMainBorder ? 1 : 0.85,
         }).addTo(googleMapRef.current);
-        gridLayersRef.current.push(polyline);
+        gridLayersRef.current.push(hLine);
       });
       
-      // 3. Highlight Brahmasthan (sacred center) with pulsing effect
-      if (highlightBrahmasthan) {
+      // OPTIONAL: Add finer subdivisions for outer layer (9 cells per side)
+      if (showOuterLayer) {
+        // Subdivide outer strip into 9 cells
+        for (let i = 0; i <= 9; i++) {
+          const t = i / 9 / 3; // Within first third
+          
+          // Top strip subdivisions
+          const topBottom = interpolate(BL, BR, i/9);
+          const topTop = interpolate(interpolate(BL, TL, 1/3), interpolate(BR, TR, 1/3), i/9);
+          window.L.polyline([topBottom, topTop].map(p => {
+            const coord = xyToLatLng(center, p.x, p.y);
+            return [coord.latitude, coord.longitude];
+          }), {
+            color: '#F4C430',
+            weight: 1,
+            opacity: 0.5,
+          }).addTo(googleMapRef.current);
+        }
+      }
+      
+      // 3. Highlight CENTER LAYER (Brahmasthan) - Middle third of middle third
+      if (showCenterLayer) {
+        // Calculate center 1/3 of the plot
+        const centerBL = interpolate(interpolate(BL, BR, 1/3), interpolate(BL, TL, 1/3), 0);
+        const centerBR = interpolate(interpolate(BL, BR, 2/3), interpolate(BL, TL, 1/3), 0);
+        const centerTR = interpolate(interpolate(BL, BR, 2/3), interpolate(BL, TL, 2/3), 0);
+        const centerTL = interpolate(interpolate(BL, BR, 1/3), interpolate(BL, TL, 2/3), 0);
+        
+        const centerCorners = [centerBL, centerBR, centerTR, centerTL];
+        const centerLatLngs = centerCorners.map(p => {
+          const coord = xyToLatLng(center, p.x, p.y);
+          return [coord.latitude, coord.longitude];
+        });
+        
+        // Draw Brahmasthan rectangle
+        window.L.polygon(centerLatLngs, {
+          color: '#FF8C00',
+          fillColor: '#FFA500',
+          fillOpacity: 0.5,
+          weight: 4,
+        }).addTo(googleMapRef.current);
+        
         const brahmasthanCells = getBrahmasthanCells();
         
         // First, draw all Brahmasthan cells with orange fill
@@ -356,67 +414,129 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
         gridLayersRef.current.push(omMarker);
       }
       
-      // 4. Draw devta labels with enhanced styling
-      if (showDevtaLabels) {
-        for (let row = 0; row < 9; row++) {
-          for (let col = 0; col < 9; col++) {
-            // Skip center cell if Brahmasthan is highlighted (OM is there)
-            if (highlightBrahmasthan && row === 4 && col === 4) continue;
-            
-            const devta = VASTU_GRID_9X9[row][col];
-            const cellCenter = getCellCenterXY(rectXY, row, col);
-            const coord = xyToLatLng(center, cellCenter.x, cellCenter.y);
-            
-            const isBrahmasthan = row >= 3 && row <= 5 && col >= 3 && col <= 5;
-            
-            const icon = window.L.divIcon({
-              className: 'devta-label',
-              html: `<div style="
-                background: linear-gradient(135deg, ${devta.color}F0, ${devta.color}CC);
-                color: white;
-                padding: 4px 8px;
-                border-radius: 6px;
-                font-size: 10px;
-                font-weight: ${isBrahmasthan ? '900' : 'bold'};
-                white-space: nowrap;
-                border: 2px solid ${isBrahmasthan ? '#FFA500' : 'white'};
-                box-shadow: 0 3px 8px rgba(0,0,0,0.5);
-                text-align: center;
-                text-shadow: 0 1px 2px rgba(0,0,0,0.4);
-              ">
-                ${devta.devta}
-                <br/>
-                <span style="font-size: 7px; opacity: 0.9;">${devta.zone}</span>
-              </div>`,
-              iconSize: [null, null],
-              iconAnchor: [0, 0]
-            });
-            
-            const marker = window.L.marker([coord.latitude, coord.longitude], {
-              icon
-            }).addTo(googleMapRef.current);
-            
-            marker.bindTooltip(`
-              <div style="
-                background: linear-gradient(135deg, ${devta.color}, ${devta.color}DD);
-                color: white;
-                padding: 8px 12px;
-                border-radius: 8px;
-                font-weight: bold;
-                font-size: 12px;
-                border: 3px solid white;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-                text-align: center;
-              ">
-                <div style="font-size: 14px; margin-bottom: 4px;">${devta.devta}</div>
-                <div style="font-size: 11px; opacity: 0.95;">Zone: ${devta.zone}</div>
-                <div style="font-size: 10px; opacity: 0.9; margin-top: 4px;">Energy: ${devta.energy}</div>
-              </div>
-            `, { direction: 'top', offset: [0, -5] });
-            
-            gridLayersRef.current.push(marker);
-          }
-        }
+      // 4. Draw 45 DEVTA LABELS (3-Layer System)
+      const all45Devtas = getAll45Devtas();
+      
+      // OUTER LAYER (Perimeter - 28 devtas)
+      if (showOuterLayer) {
+        let outerIndex = 0;
+        
+        // Top row (9 devtas)
+        OUTER_LAYER.north.forEach((devta, i) => {
+          const cellCenter = getCellCenterXY(rectXY, 0, i);
+          const coord = xyToLatLng(center, cellCenter.x, cellCenter.y);
+          createDevtaMarker(devta, coord, 'outer');
+        });
+        
+        // Right column (7 devtas)
+        OUTER_LAYER.east.forEach((devta, i) => {
+          const cellCenter = getCellCenterXY(rectXY, i + 1, 8);
+          const coord = xyToLatLng(center, cellCenter.x, cellCenter.y);
+          createDevtaMarker(devta, coord, 'outer');
+        });
+        
+        // Bottom row (9 devtas)
+        OUTER_LAYER.south.forEach((devta, i) => {
+          const cellCenter = getCellCenterXY(rectXY, 8, 8 - i);
+          const coord = xyToLatLng(center, cellCenter.x, cellCenter.y);
+          createDevtaMarker(devta, coord, 'outer');
+        });
+        
+        // Left column (7 devtas)
+        OUTER_LAYER.west.forEach((devta, i) => {
+          const cellCenter = getCellCenterXY(rectXY, 7 - i, 0);
+          const coord = xyToLatLng(center, cellCenter.x, cellCenter.y);
+          createDevtaMarker(devta, coord, 'outer');
+        });
+      }
+      
+      // MIDDLE LAYER (8 devtas)
+      if (showMiddleLayer) {
+        MIDDLE_LAYER.forEach((devta, i) => {
+          // Position around the center
+          const positions = [
+            {row: 2, col: 4}, // N
+            {row: 4, col: 6}, // E
+            {row: 6, col: 4}, // S
+            {row: 4, col: 2}, // W
+            {row: 2, col: 2}, // NW
+            {row: 2, col: 6}, // NE
+            {row: 6, col: 2}, // SW
+            {row: 6, col: 6}, // SE
+          ];
+          const pos = positions[i];
+          const cellCenter = getCellCenterXY(rectXY, pos.row, pos.col);
+          const coord = xyToLatLng(center, cellCenter.x, cellCenter.y);
+          createDevtaMarker(devta, coord, 'middle');
+        });
+      }
+      
+      // Helper function to create devta marker
+      function createDevtaMarker(devta, coord, layer) {
+        const layerSizes = {
+          outer: { fontSize: 9, padding: '3px 6px', borderWidth: 2 },
+          middle: { fontSize: 11, padding: '4px 8px', borderWidth: 2.5 },
+          center: { fontSize: 14, padding: '6px 10px', borderWidth: 3 },
+        };
+        
+        const size = layerSizes[layer];
+        
+        const icon = window.L.divIcon({
+          className: `devta-label-${layer}`,
+          html: `<div style="
+            background: linear-gradient(135deg, ${devta.color}F5, ${devta.color}D0);
+            color: white;
+            padding: ${size.padding};
+            border-radius: ${layer === 'center' ? '8px' : '6px'};
+            font-size: ${size.fontSize}px;
+            font-weight: ${layer === 'center' ? '900' : 'bold'};
+            white-space: nowrap;
+            border: ${size.borderWidth}px solid ${layer === 'center' ? '#FFD700' : 'white'};
+            box-shadow: 0 ${layer === 'center' ? '4' : '3'}px ${layer === 'center' ? '10' : '8'}px rgba(0,0,0,0.6);
+            text-align: center;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+            ${layer === 'center' ? 'animation: centerGlow 2s ease-in-out infinite;' : ''}
+          ">
+            ${devta.devta}
+            <br/>
+            <span style="font-size: ${size.fontSize - 2}px; opacity: 0.9;">${devta.zone}</span>
+          </div>
+          ${layer === 'center' ? `
+            <style>
+              @keyframes centerGlow {
+                0%, 100% { box-shadow: 0 4px 10px rgba(255,215,0,0.6); }
+                50% { box-shadow: 0 6px 16px rgba(255,215,0,1), 0 0 0 4px rgba(255,215,0,0.3); }
+              }
+            </style>
+          ` : ''}`,
+          iconSize: [null, null],
+          iconAnchor: [0, 0]
+        });
+        
+        const marker = window.L.marker([coord.latitude, coord.longitude], {
+          icon
+        }).addTo(googleMapRef.current);
+        
+        marker.bindTooltip(`
+          <div style="
+            background: linear-gradient(135deg, ${devta.color}, ${devta.color}DD);
+            color: white;
+            padding: 10px 14px;
+            border-radius: 10px;
+            font-weight: bold;
+            font-size: 13px;
+            border: 3px solid white;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.6);
+            text-align: center;
+          ">
+            <div style="font-size: 15px; margin-bottom: 5px; font-weight: 900;">${devta.devta}</div>
+            <div style="font-size: 11px; opacity: 0.95; margin: 3px 0;">Zone: ${devta.zone}</div>
+            <div style="font-size: 10px; opacity: 0.9;">Energy: ${devta.energy}</div>
+            <div style="font-size: 9px; margin-top: 5px; padding-top: 5px; border-top: 1px solid rgba(255,255,255,0.3); opacity: 0.85;">Layer: ${layer.toUpperCase()}</div>
+          </div>
+        `, { direction: 'top', offset: [0, -5] });
+        
+        gridLayersRef.current.push(marker);
       }
       
       setShowVastuGrid(true);
@@ -469,7 +589,7 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
   // Effect to draw grid
   useEffect(() => {
     if (plotCorners.length === 4 && googleMapRef.current && !cornerSelectionMode) {
-      console.log('🎨 Drawing grid...');
+      console.log('🎨 Drawing grid with layers:', { outer: showOuterLayer, middle: showMiddleLayer, center: showCenterLayer });
       // Remove plot outline before drawing grid
       if (plotOutlineRef.current) {
         try {
@@ -479,7 +599,7 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
       }
       drawVastuGrid();
     }
-  }, [plotCorners, showDevtaLabels, highlightBrahmasthan, cornerSelectionMode]);
+  }, [plotCorners, showOuterLayer, showMiddleLayer, showCenterLayer, cornerSelectionMode]);
 
   // AUTO-PLACE DRAGGABLE CORNERS
   useEffect(() => {
@@ -862,26 +982,38 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
                 </TouchableOpacity>
               )}
               
-              {/* TOGGLE LABELS */}
+              {/* LAYER TOGGLES - Show when grid is active */}
               {showVastuGrid && (
-                <TouchableOpacity
-                  style={[styles.mapControlButton, showDevtaLabels && styles.mapControlButtonActive]}
-                  onPress={() => setShowDevtaLabels(!showDevtaLabels)}
-                  activeOpacity={0.6}
-                >
-                  <Text style={styles.mapControlButtonText}>🏷️</Text>
-                </TouchableOpacity>
-              )}
-              
-              {/* TOGGLE BRAHMASTHAN */}
-              {showVastuGrid && (
-                <TouchableOpacity
-                  style={[styles.mapControlButton, highlightBrahmasthan && styles.mapControlButtonActive]}
-                  onPress={() => setHighlightBrahmasthan(!highlightBrahmasthan)}
-                  activeOpacity={0.6}
-                >
-                  <Text style={styles.mapControlButtonText}>🕉️</Text>
-                </TouchableOpacity>
+                <>
+                  <View style={styles.layerDivider} />
+                  
+                  {/* Outer Layer Toggle */}
+                  <TouchableOpacity
+                    style={[styles.layerButton, showOuterLayer && styles.layerButtonActive]}
+                    onPress={() => setShowOuterLayer(!showOuterLayer)}
+                    activeOpacity={0.6}
+                  >
+                    <Text style={styles.layerButtonText}>O</Text>
+                  </TouchableOpacity>
+                  
+                  {/* Middle Layer Toggle */}
+                  <TouchableOpacity
+                    style={[styles.layerButton, showMiddleLayer && styles.layerButtonActive]}
+                    onPress={() => setShowMiddleLayer(!showMiddleLayer)}
+                    activeOpacity={0.6}
+                  >
+                    <Text style={styles.layerButtonText}>M</Text>
+                  </TouchableOpacity>
+                  
+                  {/* Center Layer Toggle */}
+                  <TouchableOpacity
+                    style={[styles.layerButton, showCenterLayer && styles.layerButtonActive]}
+                    onPress={() => setShowCenterLayer(!showCenterLayer)}
+                    activeOpacity={0.6}
+                  >
+                    <Text style={styles.layerButtonText}>C</Text>
+                  </TouchableOpacity>
+                </>
               )}
             </View>
           </View>
@@ -1375,6 +1507,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.6)',
+  },
+  layerDivider: {
+    height: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    marginVertical: getResponsiveSize(8),
+    width: getResponsiveSize(44),
+  },
+  layerButton: {
+    width: getResponsiveSize(44),
+    height: getResponsiveSize(44),
+    borderRadius: getResponsiveSize(22),
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#999999',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  layerButtonActive: {
+    backgroundColor: 'rgba(244, 196, 48, 0.95)',
+    borderColor: '#F4C430',
+    borderWidth: 3,
+  },
+  layerButtonText: {
+    fontSize: getResponsiveFont(16),
+    fontWeight: '900',
+    color: '#2C2C2C',
   },
 });
 

@@ -82,6 +82,71 @@ export function createGridLinesXY(rectCorners) {
 }
 
 /**
+ * Create 3-layer grid (divide by 3)
+ * Returns outer, middle, and center grid lines
+ */
+export function create3LayerGridXY(rectCorners) {
+  const [BL, BR, TR, TL] = rectCorners;
+  
+  const divisions = [0, 1/3, 2/3, 1]; // 3 layers
+  const outerLines = [];
+  const middleLines = [];
+  
+  // Main 3x3 division lines (thicker)
+  divisions.forEach((t) => {
+    // Vertical
+    const bottomPoint = interpolate(BL, BR, t);
+    const topPoint = interpolate(TL, TR, t);
+    outerLines.push({ line: [bottomPoint, topPoint], type: 'vertical', position: t });
+    
+    // Horizontal
+    const leftPoint = interpolate(BL, TL, t);
+    const rightPoint = interpolate(BR, TR, t);
+    outerLines.push({ line: [leftPoint, rightPoint], type: 'horizontal', position: t });
+  });
+  
+  // Subdivide outer perimeter cells (for 45 devtas)
+  const outerSubdivisions = [];
+  
+  // Top row subdivisions (9 cells)
+  for (let i = 0; i <= 9; i++) {
+    const t = i / 9 / 3; // Within first 1/3
+    const bottomPoint = interpolate(BL, BR, t);
+    const topPoint = interpolate(TL, TR, t);
+    outerSubdivisions.push({ line: [bottomPoint, topPoint], layer: 'outer', dir: 'N' });
+  }
+  
+  // Similar for other sides...
+  // (We can add more detailed subdivisions as needed)
+  
+  return { outerLines, middleLines, outerSubdivisions };
+}
+
+/**
+ * Get cell position for 3-layer system
+ */
+export function get3LayerCellXY(rect, layer, index) {
+  const [BL, BR, TR, TL] = rect;
+  
+  if (layer === 'center') {
+    // Brahma - center cell (1/3 to 2/3 in both directions)
+    return {
+      corners: [
+        interpolate(interpolate(BL, BR, 1/3), interpolate(TL, TR, 1/3), 1/3),
+        interpolate(interpolate(BL, BR, 2/3), interpolate(TL, TR, 2/3), 1/3),
+        interpolate(interpolate(BL, BR, 2/3), interpolate(TL, TR, 2/3), 2/3),
+        interpolate(interpolate(BL, BR, 1/3), interpolate(TL, TR, 1/3), 2/3),
+      ],
+      center: getCellCenterXY(rect, 4, 4), // Approximate center in 9x9
+    };
+  }
+  
+  // For outer and middle layers, calculate based on index
+  // This is simplified - full implementation based on devta positions
+  return null;
+}
+
+/**
  * Get center of a specific cell in the 9×9 grid
  */
 export function getCellCenterXY(rect, row, col) {

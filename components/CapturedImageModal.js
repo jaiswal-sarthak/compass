@@ -22,7 +22,7 @@ import * as FileSystem from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import { captureRef } from 'react-native-view-shot';
-import { Svg, Path } from 'react-native-svg';
+import { Svg, Path, Line, Circle, Rect, Text as SvgText } from 'react-native-svg';
 import CompassView from './CompassView';
 
 // Get dimensions safely
@@ -55,12 +55,20 @@ export default function CapturedImageModal({
   heading, 
   onClose, 
   onClearImage,
-  onImageSizeChange 
+  onImageSizeChange,
+  compassType = 'vastu'
 }) {
   const { width: screenWidth, height: screenHeight } = getDimensions();
   const [imageScale, setImageScale] = useState(1.0);
   const scale = useSharedValue(0);
   const imageContainerRef = useRef(null);
+  
+  // Grid & Compass Controls
+  const [showCompass, setShowCompass] = useState(true);
+  const [showVastuGrid, setShowVastuGrid] = useState(false);
+  const [showOuterLayer, setShowOuterLayer] = useState(true);
+  const [showMiddleLayer, setShowMiddleLayer] = useState(true);
+  const [showCenterLayer, setShowCenterLayer] = useState(true);
 
   const captureImageWithCompass = async () => {
     try {
@@ -220,7 +228,7 @@ export default function CapturedImageModal({
               </LinearGradient>
             </TouchableOpacity>
 
-            {/* Image with compass overlay - Rectangle */}
+            {/* Image with compass and grid overlay */}
             <View 
               ref={imageContainerRef}
               style={[styles.imageContainer, { width: containerWidth, height: containerHeight }]}
@@ -229,15 +237,163 @@ export default function CapturedImageModal({
                 source={{ uri: imageUri }} 
                 style={styles.backgroundImage} 
               />
-              <View style={styles.compassWrapper}>
-                <CompassView 
-                  mode={mode} 
-                  capturedImage={null}
-                  onClearImage={() => {}}
-                  onHeadingChange={() => {}}
-                  initialRotation={0}
-                />
-              </View>
+              
+              {/* Vastu Grid Overlay */}
+              {showVastuGrid && (
+                <Svg style={styles.gridOverlay} width={containerWidth} height={containerHeight}>
+                  {/* 3x3 Grid Lines */}
+                  {[1/3, 2/3].map((fraction, i) => (
+                    <React.Fragment key={`grid-${i}`}>
+                      {/* Vertical */}
+                      <Line
+                        x1={containerWidth * fraction}
+                        y1={0}
+                        x2={containerWidth * fraction}
+                        y2={containerHeight}
+                        stroke="#F4C430"
+                        strokeWidth="3"
+                        opacity="0.9"
+                      />
+                      {/* Horizontal */}
+                      <Line
+                        x1={0}
+                        y1={containerHeight * fraction}
+                        x2={containerWidth}
+                        y2={containerHeight * fraction}
+                        stroke="#F4C430"
+                        strokeWidth="3"
+                        opacity="0.9"
+                      />
+                    </React.Fragment>
+                  ))}
+                  
+                  {/* Outer border */}
+                  <Rect
+                    x={0}
+                    y={0}
+                    width={containerWidth}
+                    height={containerHeight}
+                    stroke="#FFD700"
+                    strokeWidth="5"
+                    fill="none"
+                  />
+                  
+                  {/* Brahmasthan (center cell) */}
+                  {showCenterLayer && (
+                    <>
+                      <Rect
+                        x={containerWidth / 3}
+                        y={containerHeight / 3}
+                        width={containerWidth / 3}
+                        height={containerHeight / 3}
+                        fill="#FFA500"
+                        fillOpacity="0.5"
+                        stroke="#FF8C00"
+                        strokeWidth="4"
+                      />
+                      {/* OM Symbol */}
+                      <SvgText
+                        x={containerWidth / 2}
+                        y={containerHeight / 2 + 15}
+                        fontSize="40"
+                        fontWeight="900"
+                        fill="white"
+                        textAnchor="middle"
+                        opacity="0.9"
+                        stroke="#FF8C00"
+                        strokeWidth="2"
+                      >
+                        ॐ
+                      </SvgText>
+                    </>
+                  )}
+                  
+                  {/* Corner markers */}
+                  {[
+                    {x: 0, y: 0},
+                    {x: containerWidth, y: 0},
+                    {x: containerWidth, y: containerHeight},
+                    {x: 0, y: containerHeight}
+                  ].map((corner, i) => (
+                    <Circle
+                      key={`corner-${i}`}
+                      cx={corner.x}
+                      cy={corner.y}
+                      r="12"
+                      fill="#FF0000"
+                      stroke="white"
+                      strokeWidth="3"
+                      opacity="0.8"
+                    />
+                  ))}
+                </Svg>
+              )}
+              
+              {/* Compass Overlay */}
+              {showCompass && (
+                <View style={styles.compassWrapper}>
+                  <CompassView 
+                    mode={mode}
+                    compassType={compassType}
+                    capturedImage={null}
+                    onClearImage={() => {}}
+                    onHeadingChange={() => {}}
+                    initialRotation={0}
+                  />
+                </View>
+              )}
+            </View>
+            
+            {/* Right Side Controls */}
+            <View style={styles.rightControls}>
+              {/* Toggle Compass */}
+              <TouchableOpacity
+                style={[styles.controlButton, showCompass && styles.controlButtonActive]}
+                onPress={() => setShowCompass(!showCompass)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.controlButtonText}>🧭</Text>
+              </TouchableOpacity>
+              
+              {/* Toggle Grid */}
+              <TouchableOpacity
+                style={[styles.controlButton, showVastuGrid && styles.controlButtonActive]}
+                onPress={() => setShowVastuGrid(!showVastuGrid)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.controlButtonText}>⬜</Text>
+              </TouchableOpacity>
+              
+              {showVastuGrid && (
+                <>
+                  <View style={styles.controlDivider} />
+                  
+                  {/* Layer Toggles */}
+                  <TouchableOpacity
+                    style={[styles.layerControl, showOuterLayer && styles.layerControlActive]}
+                    onPress={() => setShowOuterLayer(!showOuterLayer)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.layerControlText}>O</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={[styles.layerControl, showMiddleLayer && styles.layerControlActive]}
+                    onPress={() => setShowMiddleLayer(!showMiddleLayer)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.layerControlText}>M</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={[styles.layerControl, showCenterLayer && styles.layerControlActive]}
+                    onPress={() => setShowCenterLayer(!showCenterLayer)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.layerControlText}>C</Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
 
             {/* Image size controls */}
@@ -483,6 +639,69 @@ const styles = StyleSheet.create({
     fontSize: getResponsiveSize(12),
     fontWeight: '700',
     letterSpacing: 0.3,
+  },
+  gridOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    pointerEvents: 'none',
+  },
+  rightControls: {
+    position: 'absolute',
+    right: getResponsiveSize(-55),
+    top: '25%',
+    flexDirection: 'column',
+    gap: getResponsiveSize(10),
+    zIndex: 50,
+  },
+  controlButton: {
+    width: getResponsiveSize(46),
+    height: getResponsiveSize(46),
+    borderRadius: getResponsiveSize(23),
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  controlButtonActive: {
+    backgroundColor: 'rgba(244, 196, 48, 0.95)',
+    borderColor: '#FFD700',
+    borderWidth: 3,
+  },
+  controlButtonText: {
+    fontSize: getResponsiveSize(22),
+  },
+  controlDivider: {
+    height: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    marginVertical: getResponsiveSize(6),
+  },
+  layerControl: {
+    width: getResponsiveSize(46),
+    height: getResponsiveSize(46),
+    borderRadius: getResponsiveSize(23),
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#999999',
+    elevation: 4,
+  },
+  layerControlActive: {
+    backgroundColor: 'rgba(244, 196, 48, 0.98)',
+    borderColor: '#F4C430',
+    borderWidth: 3,
+  },
+  layerControlText: {
+    fontSize: getResponsiveSize(18),
+    fontWeight: '900',
+    color: '#2C2C2C',
   },
 });
 

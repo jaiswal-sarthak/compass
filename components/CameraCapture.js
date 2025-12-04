@@ -7,6 +7,7 @@ import {
   Modal,
   Dimensions,
   Alert,
+  Platform,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
@@ -17,15 +18,35 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
+import CompassView from './CompassView';
+import Svg, { Line, Circle, Rect } from 'react-native-svg';
 
 const { width, height } = Dimensions.get('window');
 
-export default function CameraCapture({ onCapture, onClose, visible }) {
+export default function CameraCapture({ onCapture, onClose, visible, mode = 'normal', compassType = 'vastu' }) {
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState('back');
   const cameraRef = useRef(null);
   const scale = useSharedValue(0);
   const hasAnimated = useRef(false);
+  
+  // Compass & Grid Controls
+  const [showCompass, setShowCompass] = useState(true);
+  const [showVastuGrid, setShowVastuGrid] = useState(false);
+  const [heading, setHeading] = useState(0);
+  
+  // 3 Layer Toggles
+  const [showOuterLayer, setShowOuterLayer] = useState(true);
+  const [showMiddleLayer, setShowMiddleLayer] = useState(true);
+  const [showCenterLayer, setShowCenterLayer] = useState(true);
+  
+  // Grid corners (fixed positions on screen for camera overlay)
+  const [gridCorners, setGridCorners] = useState([
+    { x: width * 0.15, y: height * 0.25 }, // Top-Left
+    { x: width * 0.85, y: height * 0.25 }, // Top-Right
+    { x: width * 0.85, y: height * 0.75 }, // Bottom-Right
+    { x: width * 0.15, y: height * 0.75 }, // Bottom-Left
+  ]);
 
   React.useEffect(() => {
     if (permission === null) {
@@ -156,41 +177,162 @@ export default function CameraCapture({ onCapture, onClose, visible }) {
         <Animated.View style={[styles.cameraContainer, animatedStyle]}>
           <CameraView style={styles.camera} facing={facing} ref={cameraRef}>
             <View style={styles.overlay}>
+              {/* Top Bar */}
               <View style={styles.topBar}>
-                <TouchableOpacity
-                  style={styles.closeButton}
-                  onPress={onClose}
-                >
+                <TouchableOpacity style={styles.closeButton} onPress={onClose}>
                   <Text style={styles.closeButtonText}>✕</Text>
                 </TouchableOpacity>
                 <Text style={styles.instructionText}>
-                  Position floor plan in center
+                  {showVastuGrid ? 'Vastu Grid Overlay Active' : 'Position floor plan in center'}
                 </Text>
               </View>
 
+              {/* Compass Overlay - Toggleable */}
+              {showCompass && (
+                <View style={styles.compassOverlay}>
+                  <CompassView
+                    mode={mode}
+                    compassType={compassType}
+                    capturedImage={null}
+                    onClearImage={() => {}}
+                    onHeadingChange={setHeading}
+                  />
+                </View>
+              )}
+
+              {/* Vastu Grid Overlay */}
+              {showVastuGrid && (
+                <Svg style={styles.gridSvg} width={width} height={height}>
+                  {/* 3x3 Main Grid */}
+                  {[1/3, 2/3].map((fraction, i) => (
+                    <React.Fragment key={`grid-${i}`}>
+                      {/* Vertical */}
+                      <Line
+                        x1={gridCorners[0].x + (gridCorners[1].x - gridCorners[0].x) * fraction}
+                        y1={gridCorners[0].y}
+                        x2={gridCorners[3].x + (gridCorners[2].x - gridCorners[3].x) * fraction}
+                        y2={gridCorners[3].y}
+                        stroke="#F4C430"
+                        strokeWidth="3"
+                        opacity="0.9"
+                      />
+                      {/* Horizontal */}
+                      <Line
+                        x1={gridCorners[0].x}
+                        y1={gridCorners[0].y + (gridCorners[3].y - gridCorners[0].y) * fraction}
+                        x2={gridCorners[1].x}
+                        y2={gridCorners[1].y + (gridCorners[2].y - gridCorners[1].y) * fraction}
+                        stroke="#F4C430"
+                        strokeWidth="3"
+                        opacity="0.9"
+                      />
+                    </React.Fragment>
+                  ))}
+                  
+                  {/* Outer border */}
+                  <Rect
+                    x={gridCorners[0].x}
+                    y={gridCorners[0].y}
+                    width={gridCorners[1].x - gridCorners[0].x}
+                    height={gridCorners[3].y - gridCorners[0].y}
+                    stroke="#FFD700"
+                    strokeWidth="5"
+                    fill="none"
+                  />
+                  
+                  {/* Brahmasthan highlight (center cell) */}
+                  {showCenterLayer && (
+                    <Rect
+                      x={gridCorners[0].x + (gridCorners[1].x - gridCorners[0].x) / 3}
+                      y={gridCorners[0].y + (gridCorners[3].y - gridCorners[0].y) / 3}
+                      width={(gridCorners[1].x - gridCorners[0].x) / 3}
+                      height={(gridCorners[3].y - gridCorners[0].y) / 3}
+                      fill="#FFA500"
+                      fillOpacity="0.4"
+                      stroke="#FF8C00"
+                      strokeWidth="3"
+                    />
+                  )}
+                  
+                  {/* Draggable corner markers */}
+                  {gridCorners.map((corner, i) => (
+                    <Circle
+                      key={`corner-${i}`}
+                      cx={corner.x}
+                      cy={corner.y}
+                      r="20"
+                      fill="#FF0000"
+                      stroke="white"
+                      strokeWidth="4"
+                      opacity="0.9"
+                    />
+                  ))}
+                </Svg>
+              )}
+
+              {/* Capture Frame */}
               <View style={styles.captureArea}>
-                <View style={styles.captureFrame} />
+                {!showVastuGrid && <View style={styles.captureFrame} />}
               </View>
 
-              <View style={styles.bottomBar}>
+              {/* Right Side Controls */}
+              <View style={styles.rightControls}>
+                {/* Toggle Compass */}
                 <TouchableOpacity
-                  style={styles.galleryButton}
-                  onPress={pickImage}
+                  style={[styles.sideButton, showCompass && styles.sideButtonActive]}
+                  onPress={() => setShowCompass(!showCompass)}
                 >
+                  <Text style={styles.sideButtonText}>🧭</Text>
+                </TouchableOpacity>
+                
+                {/* Toggle Vastu Grid */}
+                <TouchableOpacity
+                  style={[styles.sideButton, showVastuGrid && styles.sideButtonActive]}
+                  onPress={() => setShowVastuGrid(!showVastuGrid)}
+                >
+                  <Text style={styles.sideButtonText}>⬜</Text>
+                </TouchableOpacity>
+                
+                {showVastuGrid && (
+                  <>
+                    <View style={styles.sideDivider} />
+                    
+                    {/* Layer Toggles */}
+                    <TouchableOpacity
+                      style={[styles.layerButton, showOuterLayer && styles.layerButtonActive]}
+                      onPress={() => setShowOuterLayer(!showOuterLayer)}
+                    >
+                      <Text style={styles.layerButtonText}>O</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      style={[styles.layerButton, showMiddleLayer && styles.layerButtonActive]}
+                      onPress={() => setShowMiddleLayer(!showMiddleLayer)}
+                    >
+                      <Text style={styles.layerButtonText}>M</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      style={[styles.layerButton, showCenterLayer && styles.layerButtonActive]}
+                      onPress={() => setShowCenterLayer(!showCenterLayer)}
+                    >
+                      <Text style={styles.layerButtonText}>C</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+
+              {/* Bottom Bar */}
+              <View style={styles.bottomBar}>
+                <TouchableOpacity style={styles.galleryButton} onPress={pickImage}>
                   <Text style={styles.galleryButtonText}>☰ Gallery</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={styles.captureButton}
-                  onPress={takePicture}
-                >
+                <TouchableOpacity style={styles.captureButton} onPress={takePicture}>
                   <View style={styles.captureButtonInner} />
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={styles.flipButton}
-                  onPress={toggleCameraFacing}
-                >
+                <TouchableOpacity style={styles.flipButton} onPress={toggleCameraFacing}>
                   <Text style={styles.flipButtonText}>⇄</Text>
                 </TouchableOpacity>
               </View>
@@ -330,6 +472,72 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  compassOverlay: {
+    position: 'absolute',
+    top: height * 0.5 - 150,
+    left: width * 0.5 - 150,
+    width: 300,
+    height: 300,
+    opacity: 0.6,
+    pointerEvents: 'none',
+  },
+  gridSvg: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    pointerEvents: 'none',
+  },
+  rightControls: {
+    position: 'absolute',
+    top: 100,
+    right: 15,
+    flexDirection: 'column',
+    gap: 12,
+    zIndex: 100,
+  },
+  sideButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  sideButtonActive: {
+    backgroundColor: 'rgba(244, 196, 48, 0.9)',
+    borderColor: '#FFD700',
+    borderWidth: 3,
+  },
+  sideButtonText: {
+    fontSize: 24,
+  },
+  sideDivider: {
+    height: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    marginVertical: 8,
+  },
+  layerButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#999999',
+  },
+  layerButtonActive: {
+    backgroundColor: 'rgba(244, 196, 48, 0.95)',
+    borderColor: '#F4C430',
+    borderWidth: 3,
+  },
+  layerButtonText: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#2C2C2C',
   },
 });
 

@@ -434,6 +434,8 @@ export default function App() {
         {showCamera && (
           <CameraCapture
                 visible={showCamera}
+                mode={currentMode}
+                compassType={compassType}
             onCapture={async (uri) => {
                   setShowCamera(false);
                   // Save image to storage
@@ -454,6 +456,7 @@ export default function App() {
               visible={showCapturedImageModal && !!capturedImage}
               imageUri={capturedImage}
               mode={currentMode}
+              compassType={compassType}
               heading={heading}
               onClose={() => setShowCapturedImageModal(false)}
               onClearImage={() => {
