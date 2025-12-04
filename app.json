@@ -2,6 +2,7 @@
   "expo": {
     "name": "Vastu Compass",
     "slug": "vastu-compass",
+    "owner": "hir25",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -75,16 +76,16 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "extra": {
-      "eas": {
-        "projectId": "e544473f-0d96-42e0-bc55-543458a1c09b"
-      }
-    },
     "runtimeVersion": {
       "policy": "appVersion"
     },
+    "extra": {
+      "eas": {
+        "projectId": "4488f2c4-cc90-49c5-95cb-d209e22df1d4"
+      }
+    },
     "updates": {
-      "url": "https://u.expo.dev/e544473f-0d96-42e0-bc55-543458a1c09b"
+      "url": "https://u.expo.dev/4488f2c4-cc90-49c5-95cb-d209e22df1d4"
     }
   }
 }

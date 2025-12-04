@@ -7,6 +7,10 @@
       name="viewport"
       content="width=device-width, initial-scale=1, shrink-to-fit=no"
     />
+    <!-- Cache control: Always fetch fresh content -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>Vastu Compass</title>
     <style>
       /**
@@ -48,6 +52,54 @@
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
         -ms-overflow-style: scrollbar;
+      }
+      
+      /* Leaflet marker styles - ensure visibility on all devices */
+      .leaflet-marker-icon {
+        z-index: 10000 !important;
+      }
+      
+      .corner-tooltip {
+        z-index: 10001 !important;
+        pointer-events: none;
+      }
+      
+      /* Ensure corner markers are always visible and draggable */
+      .corner-marker-0,
+      .corner-marker-1,
+      .corner-marker-2,
+      .corner-marker-3 {
+        z-index: 10000 !important;
+        cursor: grab !important;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+        touch-action: none;
+      }
+      
+      .corner-marker-0:active,
+      .corner-marker-1:active,
+      .corner-marker-2:active,
+      .corner-marker-3:active {
+        cursor: grabbing !important;
+      }
+      
+      /* Pulsing animation for corner markers */
+      @keyframes cornerPulse {
+        0%, 100% { 
+          transform: scale(1);
+          box-shadow: 0 6px 20px rgba(255,0,0,0.8), 0 0 0 0px rgba(255,0,0,0.5);
+        }
+        50% { 
+          transform: scale(1.15);
+          box-shadow: 0 8px 24px rgba(255,0,0,1), 0 0 0 8px rgba(255,0,0,0.3);
+        }
+      }
+      
+      /* Apply to all corner marker divs */
+      [class*="corner-marker-"] > div {
+        animation: cornerPulse 2s ease-in-out infinite !important;
       }
     </style>
     <!-- Leaflet JS - No API key required! -->

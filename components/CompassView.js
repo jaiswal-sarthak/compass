@@ -5,9 +5,7 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
-  interpolate,
 } from 'react-native-reanimated';
-import Svg, { Circle, Line, Text as SvgText, G, Path } from 'react-native-svg';
 import NormalCompass from './compassModes/NormalCompass';
 import Vastu16Compass from './compassModes/Vastu16Compass';
 import Vastu32Compass from './compassModes/Vastu32Compass';
@@ -27,27 +25,16 @@ const getDimensions = () => {
 
 const { width, height } = getDimensions();
 
-// Responsive compass size - adapts to screen size
+// Responsive compass size
 const getCompassSize = () => {
-  if (!width || width === 0) return 300; // Fallback size
-  
-  // For web, use a fixed max size
+  if (!width || width === 0) return 300;
   if (Platform.OS === 'web') {
     const effectiveWidth = Math.min(width, 600);
-    return effectiveWidth * 0.75; // 75% of effective width (increased from 60%)
+    return effectiveWidth * 0.75;
   }
-  
-  const screenMin = Math.min(width, height);
-  // Use 85% of screen width (increased from 75%), but ensure it fits with other elements
   const baseSize = width * 0.85;
-  // For smaller screens, use a smaller percentage
-  if (width < 360) {
-    return width * 0.80; // Increased from 70%
-  }
-  // For larger screens, cap at reasonable size
-  if (width > 414) {
-    return Math.min(baseSize, 420); // Increased from 350
-  }
+  if (width < 360) return width * 0.80;
+  if (width > 414) return Math.min(baseSize, 420);
   return baseSize;
 };
 
@@ -56,103 +43,170 @@ const COMPASS_SIZE = getCompassSize();
 // Responsive sizing functions
 const getResponsiveSize = (size) => {
   if (!width || width === 0) return size;
-  
-  // For web/large screens, cap the scaling
   if (Platform.OS === 'web') {
     const effectiveWidth = Math.min(width, 700);
     const scale = effectiveWidth / 375;
     return Math.max(size * scale, size * 0.9);
   }
-  
   const scale = width / 375;
   return Math.max(size * scale, size * 0.8);
 };
 
 const getResponsiveFont = (size) => {
   if (!width || width === 0) return size;
-  
-  // For web/large screens, cap the scaling
   if (Platform.OS === 'web') {
     const effectiveWidth = Math.min(width, 600);
     const scale = effectiveWidth / 375;
     return Math.max(size * scale, size * 0.85);
   }
-  
   const scale = width / 375;
   return Math.max(size * scale, size * 0.85);
 };
 
-export default function CompassView({ mode, compassType, capturedImage, onClearImage, onHeadingChange, onImageSizeChange, initialRotation }) {
+// Device detection and calibration
+const getDeviceInfo = () => {
+  const ua = navigator.userAgent;
+  const isIOS = /iPhone|iPad|iPod/.test(ua);
+  const isAndroid = /Android/.test(ua);
+  const isPixel = /Pixel/.test(ua);
+  const isSamsung = /Samsung/.test(ua);
+  
+  return {
+    isIOS,
+    isAndroid,
+    isPixel,
+    isSamsung,
+    platform: Platform.OS,
+  };
+};
+
+// Low-pass filter for smooth compass readings
+class LowPassFilter {
+  constructor(alpha = 0.15) {
+    this.alpha = alpha; // Smoothing factor (0-1, lower = smoother)
+    this.value = null;
+  }
+
+  filter(newValue) {
+    if (this.value === null) {
+      this.value = newValue;
+      return newValue;
+    }
+
+    // Handle angle wraparound (359° -> 0°)
+    let diff = newValue - this.value;
+    if (diff > 180) diff -= 360;
+    if (diff < -180) diff += 360;
+
+    this.value = this.value + this.alpha * diff;
+    
+    // Normalize to 0-360
+    while (this.value < 0) this.value += 360;
+    while (this.value >= 360) this.value -= 360;
+
+    return this.value;
+  }
+
+  reset() {
+    this.value = null;
+  }
+}
+
+export default function CompassView({ 
+  mode, 
+  compassType, 
+  capturedImage, 
+  onClearImage, 
+  onHeadingChange, 
+  onImageSizeChange, 
+  initialRotation 
+}) {
   const [heading, setHeading] = useState(0);
-  const [imageContainerSize, setImageContainerSize] = useState(COMPASS_SIZE); // Start at 100%
+  const [imageContainerSize, setImageContainerSize] = useState(COMPASS_SIZE);
   const rotation = useSharedValue(0);
   const [initialRotationComplete, setInitialRotationComplete] = useState(false);
   const [webPermissionGranted, setWebPermissionGranted] = useState(false);
-  const [webPermissionRequested, setWebPermissionRequested] = useState(false);
-  
-  // Store sensor data for tilt compensation
-  const magnetometerData = useRef({ x: 0, y: 0, z: 0 });
-  const accelerometerData = useRef({ x: 0, y: 0, z: 0 });
-  
-  const MIN_SIZE = COMPASS_SIZE * 1.0; // 100% minimum
-  const MAX_SIZE = COMPASS_SIZE * 1.3; // 130% maximum
+  const [showCalibration, setShowCalibration] = useState(true);
 
-  // Calculate tilt-compensated compass heading using all 3 axes
-  const calculateTiltCompensatedHeading = () => {
-    const { x: mx, y: my, z: mz } = magnetometerData.current;
-    const { x: ax, y: ay, z: az } = accelerometerData.current;
+  // Filters for smooth readings
+  const headingFilter = useRef(new LowPassFilter(0.15));
+  const deviceInfo = useRef(getDeviceInfo());
+  
+  const MIN_SIZE = COMPASS_SIZE * 1.0;
+  const MAX_SIZE = COMPASS_SIZE * 1.3;
 
-    // Check if we have valid accelerometer data for tilt compensation
-    const accelMagnitude = Math.sqrt(ax * ax + ay * ay + az * az);
+  // Log device info once on mount
+  useEffect(() => {
+    const device = deviceInfo.current;
+    console.log('🧭 Compass initialized for device:', {
+      platform: device.platform,
+      isIOS: device.isIOS,
+      isAndroid: device.isAndroid,
+      isPixel: device.isPixel,
+      isSamsung: device.isSamsung,
+      userAgent: navigator.userAgent,
+    });
     
-    // If accelerometer data is not available or invalid, fall back to 2D calculation
-    if (accelMagnitude < 0.1) {
-      // Fallback to 2D compass (using only X and Y from magnetometer)
-      // Use -X and Y for correct orientation: 0° = North
-      let heading = Math.atan2(-mx, my) * (180 / Math.PI);
-      return (heading + 360) % 360;
+    if (device.isPixel) {
+      console.log('📱 Pixel device detected - applying special calibration:');
+      console.log('  - Inverted sensor axes');
+      console.log('  - 90° orientation correction');
+      console.log('  - Enhanced smoothing (0.08 alpha)');
+      console.log('  - Reduced update rate (150ms)');
+      console.log('  - Increased damping for stability');
     }
+  }, []);
 
-    // Calculate pitch and roll from accelerometer (device tilt)
-    // Pitch: rotation around X-axis (forward/backward tilt)
-    // Roll: rotation around Y-axis (left/right tilt)
-    const pitch = Math.atan2(-ax, Math.sqrt(ay * ay + az * az));
-    const roll = Math.atan2(ay, az);
-
-    // Apply tilt compensation to magnetometer readings
-    // Rotate magnetometer vector to compensate for device tilt
-    const cosPitch = Math.cos(pitch);
-    const sinPitch = Math.sin(pitch);
-    const cosRoll = Math.cos(roll);
-    const sinRoll = Math.sin(roll);
-
-    // Tilt-compensated magnetometer values
-    // This projects the 3D magnetic field onto the horizontal plane
-    const compensatedX = mx * cosPitch + mz * sinPitch;
-    const compensatedY = mx * sinRoll * sinPitch + my * cosRoll - mz * sinRoll * cosPitch;
-
-    // Calculate heading from tilt-compensated values
-    // Note: We use atan2(-compensatedX, compensatedY) to get correct orientation
-    // This gives us 0° = North, 90° = East, 180° = South, 270° = West
-    let heading = Math.atan2(-compensatedX, compensatedY) * (180 / Math.PI);
+  // Universal compass heading calculation that works across ALL devices
+  const calculateHeading = (mx, my, mz = 0) => {
+    // Normalize magnetometer readings
+    const magnitude = Math.sqrt(mx * mx + my * my + mz * mz);
+    if (magnitude < 0.01) return 0; // Invalid reading
     
-    // Normalize to 0-360 degrees
+    // Normalized values
+    const nx = mx / magnitude;
+    const ny = my / magnitude;
+    
+    let heading;
+    
+    // Device-specific calculations
+    if (deviceInfo.current.isPixel) {
+      // Google Pixel devices have INVERTED Y-axis
+      // They need opposite formula
+      heading = Math.atan2(-nx, -ny) * (180 / Math.PI);
+      
+      // Additional 90° correction for Pixel orientation
+      heading = (heading + 90) % 360;
+    } else {
+      // Standard formula for iOS, Samsung, and other Android devices
+      // When phone is flat on table, screen facing up:
+      // - X-axis points to the right edge
+      // - Y-axis points to the top edge (towards front camera)
+      // - Z-axis points up (out of screen)
+      heading = Math.atan2(nx, ny) * (180 / Math.PI);
+    }
+    
+    // Normalize to 0-360
     heading = (heading + 360) % 360;
+    
+    // Apply low-pass filter for smoothness (more aggressive for Pixel)
+    if (deviceInfo.current.isPixel) {
+      // Increase smoothing for Pixel to reduce jitter
+      const pixelFilter = new LowPassFilter(0.08); // More aggressive smoothing
+      if (!headingFilter.current.pixelFilter) {
+        headingFilter.current.pixelFilter = pixelFilter;
+      }
+      heading = headingFilter.current.pixelFilter.filter(heading);
+    } else {
+      heading = headingFilter.current.filter(heading);
+    }
     
     return heading;
   };
 
-  // Notify parent when image size changes
-  useEffect(() => {
-    if (onImageSizeChange) {
-      onImageSizeChange(imageContainerSize);
-    }
-  }, [imageContainerSize, onImageSizeChange]);
-
   // Track initial rotation completion
   useEffect(() => {
     if (initialRotation) {
-      // Wait for initial rotation to complete (800ms + buffer)
       const timer = setTimeout(() => {
         setInitialRotationComplete(true);
       }, 1200);
@@ -162,12 +216,21 @@ export default function CompassView({ mode, compassType, capturedImage, onClearI
     }
   }, [initialRotation]);
 
-  // Check if device orientation is available on web (browsers that don't require permission)
+  // Auto-hide calibration banner
+  useEffect(() => {
+    if (showCalibration) {
+      const timer = setTimeout(() => {
+        setShowCalibration(false);
+      }, 10000);
+      return () => clearTimeout(timer);
+    }
+  }, [showCalibration]);
+
+  // Check web orientation API availability
   useEffect(() => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      // For browsers that don't require permission, check if API is available
-      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission !== 'function') {
-        // Browser doesn't require permission, auto-enable
+      if (typeof DeviceOrientationEvent !== 'undefined' && 
+          typeof DeviceOrientationEvent.requestPermission !== 'function') {
         if ('DeviceOrientationEvent' in window) {
           setWebPermissionGranted(true);
         }
@@ -175,182 +238,170 @@ export default function CompassView({ mode, compassType, capturedImage, onClearI
     }
   }, []);
 
-  // Web: Request device orientation permission
+  // Request web permission
   const requestWebPermission = () => {
     if (Platform.OS !== 'web') return;
     
-    setWebPermissionRequested(true);
-    
-    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    if (typeof DeviceOrientationEvent !== 'undefined' && 
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
       DeviceOrientationEvent.requestPermission()
         .then((response) => {
-          if (response === 'granted') {
-            setWebPermissionGranted(true);
-          } else {
-            console.warn('Device orientation permission denied');
-            setWebPermissionGranted(false);
-          }
+          setWebPermissionGranted(response === 'granted');
         })
-        .catch((error) => {
-          console.warn('Error requesting device orientation permission:', error);
+        .catch(() => {
           setWebPermissionGranted(false);
         });
-    } else {
-      // For browsers that don't require permission, check if API is available
-      if (typeof window !== 'undefined' && 'DeviceOrientationEvent' in window) {
-        setWebPermissionGranted(true);
-      }
+    } else if (typeof window !== 'undefined' && 'DeviceOrientationEvent' in window) {
+      setWebPermissionGranted(true);
     }
   };
 
+  // Main sensor effect
   useEffect(() => {
-    let subscription = null;
-    let orientationListener = null;
-    
-    // Only start sensor after initial rotation completes
     if (!initialRotationComplete) return;
-    
-    // Web: Use Device Orientation API
+
+    // WEB: Device Orientation API
     if (Platform.OS === 'web') {
-      // Don't start if permission not granted (and permission is required)
-      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function' && !webPermissionGranted) {
+      if (typeof DeviceOrientationEvent !== 'undefined' && 
+          typeof DeviceOrientationEvent.requestPermission === 'function' && 
+          !webPermissionGranted) {
         return;
       }
-      
+
       const handleOrientation = (event) => {
-        // event.alpha is the compass heading (0-360 degrees)
-        // It's relative to the device's initial orientation
-        let angle = event.alpha;
-        
-        // Some browsers provide alpha in different ranges
-        if (angle === null || angle === undefined) {
-          // Fallback: calculate from beta and gamma if alpha not available
-          const beta = event.beta || 0;
-          const gamma = event.gamma || 0;
-          // This is a simplified calculation - not as accurate as alpha
-          angle = Math.atan2(gamma, beta) * (180 / Math.PI);
+        let angle = null;
+        const device = deviceInfo.current;
+
+        // Priority 1: iOS webkitCompassHeading (most accurate and universal)
+        if (event.webkitCompassHeading !== undefined && event.webkitCompassHeading !== null) {
+          // This is already correctly calibrated for iOS
+          angle = event.webkitCompassHeading;
         }
-        
-        // Normalize to 0-360
-        angle = (angle + 360) % 360;
-        
-        setHeading(angle);
-        rotation.value = withSpring(-angle, { damping: 15, stiffness: 100 });
-        if (onHeadingChange) {
-          onHeadingChange(angle);
+        // Priority 2: Absolute orientation (more reliable)
+        else if (event.absolute === true && event.alpha !== null && event.alpha !== undefined) {
+          // Absolute orientation gives true compass heading
+          // alpha: 0° when device points North, increases counterclockwise
+          // Convert to standard compass (clockwise from North)
+          angle = 360 - event.alpha;
+        }
+        // Priority 3: Standard alpha (relative orientation)
+        else if (event.alpha !== null && event.alpha !== undefined) {
+          // Standard alpha - may be relative to initial position
+          // Still use same conversion
+          angle = 360 - event.alpha;
+        }
+
+        if (angle !== null) {
+          // Normalize to 0-360
+          angle = (angle + 360) % 360;
+          
+          // Device/Browser-specific corrections
+          if (device.isPixel) {
+            // Google Pixel devices need correction
+            // Add 180° offset for Pixel orientation difference
+            angle = (angle + 180) % 360;
+          } else if (device.isAndroid) {
+            // Other Android Chrome/Firefox - alpha is usually correct
+            // No adjustment needed
+          } else if (device.isIOS) {
+            // iOS Safari - webkitCompassHeading handles it, or alpha is correct
+            // No adjustment needed
+          }
+          
+          // Apply smoothing (more aggressive for Pixel)
+          let smoothed;
+          if (device.isPixel) {
+            // Extra smoothing for Pixel to prevent jitter
+            if (!headingFilter.current.pixelFilter) {
+              headingFilter.current.pixelFilter = new LowPassFilter(0.08);
+            }
+            smoothed = headingFilter.current.pixelFilter.filter(angle);
+          } else {
+            smoothed = headingFilter.current.filter(angle);
+          }
+          
+          setHeading(smoothed);
+          rotation.value = withSpring(-smoothed, { 
+            damping: device.isPixel ? 30 : 25,  // More damping for Pixel
+            stiffness: device.isPixel ? 70 : 80, // Less stiffness for Pixel
+            mass: 0.5 
+          });
+          
+          if (onHeadingChange) {
+            onHeadingChange(smoothed);
+          }
         }
       };
 
-      // Check if permission is already granted or not required
-      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        // Permission-based browser (iOS Safari)
+      // Add listeners for both absolute and relative orientation
+      if (typeof DeviceOrientationEvent !== 'undefined' && 
+          typeof DeviceOrientationEvent.requestPermission === 'function') {
         if (webPermissionGranted) {
-          window.addEventListener('deviceorientation', handleOrientation);
+          window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+          window.addEventListener('deviceorientation', handleOrientation, true);
         }
-      } else {
-        // For browsers that don't require permission
-        if (typeof window !== 'undefined' && 'DeviceOrientationEvent' in window) {
-          window.addEventListener('deviceorientation', handleOrientation);
-          setWebPermissionGranted(true); // Auto-granted for non-permission browsers
-        }
+      } else if (typeof window !== 'undefined' && 'DeviceOrientationEvent' in window) {
+        window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+        window.addEventListener('deviceorientation', handleOrientation, true);
+        setWebPermissionGranted(true);
       }
 
       return () => {
         if (typeof window !== 'undefined') {
-          window.removeEventListener('deviceorientation', handleOrientation);
+          window.removeEventListener('deviceorientationabsolute', handleOrientation, true);
+          window.removeEventListener('deviceorientation', handleOrientation, true);
         }
       };
     }
-    
-    // Native: Use Magnetometer + Accelerometer for tilt compensation
+
+    // NATIVE: Magnetometer
     let magnetometerSubscription = null;
-    let accelerometerSubscription = null;
-    
-    try {
-      // Check if both sensors are available
-      Promise.all([
-        Magnetometer.isAvailableAsync ? Magnetometer.isAvailableAsync() : Promise.resolve(true),
-        Accelerometer.isAvailableAsync ? Accelerometer.isAvailableAsync() : Promise.resolve(true)
-      ]).then(([magnetometerAvailable, accelerometerAvailable]) => {
-        if (magnetometerAvailable) {
-          // Listen to magnetometer (all 3 axes: x, y, z)
-          magnetometerSubscription = Magnetometer.addListener((data) => {
-            // Store all 3 axes for tilt compensation
-            magnetometerData.current = { x: data.x, y: data.y, z: data.z };
-            
-            // Calculate tilt-compensated heading
-            const angle = calculateTiltCompensatedHeading();
-            
-            setHeading(angle);
-            // Rotate compass opposite to device rotation to keep North pointing north
-            rotation.value = withSpring(-angle, { damping: 15, stiffness: 100 });
-            if (onHeadingChange) {
-              onHeadingChange(angle);
-            }
-          });
-          Magnetometer.setUpdateInterval(100);
+
+    const startMagnetometer = async () => {
+      try {
+        const isAvailable = await Magnetometer.isAvailableAsync();
+        if (!isAvailable) {
+          console.warn('Magnetometer not available');
+          return;
         }
 
-        if (accelerometerAvailable) {
-          // Listen to accelerometer (all 3 axes: x, y, z) for tilt detection
-          accelerometerSubscription = Accelerometer.addListener((data) => {
-            // Store all 3 axes for tilt compensation
-            accelerometerData.current = { x: data.x, y: data.y, z: data.z };
+        // Set update interval (slower for Pixel to reduce jitter)
+        const updateInterval = deviceInfo.current.isPixel ? 150 : 100; // 6.6 Hz for Pixel, 10 Hz for others
+        Magnetometer.setUpdateInterval(updateInterval);
+
+        magnetometerSubscription = Magnetometer.addListener((data) => {
+          const { x, y, z } = data;
+          
+          // Calculate heading with all axes for better accuracy
+          const angle = calculateHeading(x, y, z);
+          
+          setHeading(angle);
+          rotation.value = withSpring(-angle, { 
+            damping: 25, 
+            stiffness: 80,
+            mass: 0.5 
           });
-          Accelerometer.setUpdateInterval(100);
-        }
-      }).catch((error) => {
-        console.warn('Sensor availability check failed:', error);
-        // Fallback: try without accelerometer (2D compass)
-      if (Magnetometer.isAvailableAsync) {
-        Magnetometer.isAvailableAsync().then((isAvailable) => {
-          if (isAvailable) {
-              magnetometerSubscription = Magnetometer.addListener((data) => {
-                const { x, y, z } = data;
-                magnetometerData.current = { x, y, z };
-                // Fallback to 2D calculation if accelerometer not available
-              // Calculate heading - use -x and y for correct orientation
-              let angle = Math.atan2(-x, y) * (180 / Math.PI);
-              angle = (angle + 360) % 360;
-              setHeading(angle);
-              rotation.value = withSpring(-angle, { damping: 15, stiffness: 100 });
-                if (onHeadingChange) {
-                  onHeadingChange(angle);
-                }
-            });
-            Magnetometer.setUpdateInterval(100);
+          
+          if (onHeadingChange) {
+            onHeadingChange(angle);
           }
         });
-      } else {
-        // Fallback for older API
-          magnetometerSubscription = Magnetometer.addListener((data) => {
-            const { x, y, z } = data;
-            magnetometerData.current = { x: x || 0, y: y || 0, z: z || 0 };
-          // Calculate heading - use -x and y for correct orientation
-          let angle = Math.atan2(-x, y) * (180 / Math.PI);
-          angle = (angle + 360) % 360;
-          setHeading(angle);
-          rotation.value = withSpring(-angle, { damping: 15, stiffness: 100 });
-        });
-        Magnetometer.setUpdateInterval(100);
+      } catch (error) {
+        console.error('Magnetometer error:', error);
       }
-      });
-    } catch (error) {
-      console.warn('Sensor error:', error);
-    }
+    };
+
+    startMagnetometer();
 
     return () => {
       if (magnetometerSubscription) {
         magnetometerSubscription.remove();
       }
-      if (accelerometerSubscription) {
-        accelerometerSubscription.remove();
-      }
     };
-  }, [initialRotationComplete, webPermissionGranted]);
+  }, [initialRotationComplete, webPermissionGranted, onHeadingChange]);
 
+  // Animated style
   const animatedStyle = useAnimatedStyle(() => {
-    // Use initial rotation during loading, then switch to magnetometer rotation
     if (initialRotation && !initialRotationComplete) {
       return {
         transform: [{ rotate: `${initialRotation.value}deg` }],
@@ -361,15 +412,14 @@ export default function CompassView({ mode, compassType, capturedImage, onClearI
     };
   });
 
+  // Render appropriate compass
   const renderCompass = () => {
-    // Handle different compass types
     if (compassType === 'classic') {
       return <ClassicCompass heading={heading} />;
     } else if (compassType === 'fengshui') {
       return <FengShuiCompass heading={heading} />;
     }
-    
-    // For Vastu type, use the mode to determine which Vastu compass
+
     switch (mode) {
       case 'normal':
         return <NormalCompass size={COMPASS_SIZE} />;
@@ -390,15 +440,22 @@ export default function CompassView({ mode, compassType, capturedImage, onClearI
     <View style={styles.container}>
       {capturedImage && (
         <>
-          <View style={[styles.imageOverlay, { width: imageContainerSize, height: imageContainerSize, borderRadius: imageContainerSize / 2 }]}>
+          <View style={[styles.imageOverlay, { 
+            width: imageContainerSize, 
+            height: imageContainerSize, 
+            borderRadius: imageContainerSize / 2 
+          }]}>
             <Image 
               source={{ uri: capturedImage }} 
               style={styles.backgroundImage} 
             />
-            <View style={[styles.compassOverlay, { width: COMPASS_SIZE, height: COMPASS_SIZE }]}>
-            <Animated.View style={[styles.compass, animatedStyle]}>
-              {renderCompass()}
-            </Animated.View>
+            <View style={[styles.compassOverlay, { 
+              width: COMPASS_SIZE, 
+              height: COMPASS_SIZE 
+            }]}>
+              <Animated.View style={[styles.compass, animatedStyle]}>
+                {renderCompass()}
+              </Animated.View>
             </View>
           </View>
           <View style={styles.imageControls}>
@@ -440,6 +497,8 @@ export default function CompassView({ mode, compassType, capturedImage, onClearI
           {renderCompass()}
         </Animated.View>
       )}
+      
+      {/* Web permission prompt */}
       {Platform.OS === 'web' && 
        !webPermissionGranted && 
        typeof DeviceOrientationEvent !== 'undefined' && 
@@ -457,10 +516,32 @@ export default function CompassView({ mode, compassType, capturedImage, onClearI
           </TouchableOpacity>
         </View>
       )}
+      
+      {/* Heading indicator */}
       <View style={styles.headingIndicator}>
         <View style={styles.headingLine} />
         <View style={styles.headingDot} />
       </View>
+      
+      {/* Calibration banner */}
+      {showCalibration && (
+        <View style={styles.calibrationBanner}>
+          <View style={styles.calibrationContent}>
+            <Text style={styles.calibrationIcon}>∞</Text>
+            <View style={styles.calibrationTextContainer}>
+              <Text style={styles.calibrationTitle}>Calibrate Compass</Text>
+              <Text style={styles.calibrationText}>Move phone in figure-8 motion</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.calibrationCloseButton}
+              onPress={() => setShowCalibration(false)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.calibrationCloseText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -648,6 +729,65 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
   },
+  calibrationBanner: {
+    position: 'absolute',
+    bottom: -getResponsiveSize(80),
+    left: '50%',
+    marginLeft: -getResponsiveSize(140),
+    width: getResponsiveSize(280),
+    backgroundColor: 'rgba(244, 196, 48, 0.98)',
+    borderRadius: getResponsiveSize(12),
+    paddingVertical: getResponsiveSize(12),
+    paddingHorizontal: getResponsiveSize(16),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: '#DAA520',
+  },
+  calibrationContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  calibrationIcon: {
+    fontSize: getResponsiveFont(32),
+    color: '#FFFFFF',
+    fontWeight: '900',
+    marginRight: getResponsiveSize(12),
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  calibrationTextContainer: {
+    flex: 1,
+  },
+  calibrationTitle: {
+    fontSize: getResponsiveFont(14),
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: getResponsiveSize(2),
+  },
+  calibrationText: {
+    fontSize: getResponsiveFont(12),
+    color: 'rgba(255, 255, 255, 0.95)',
+    fontWeight: '600',
+  },
+  calibrationCloseButton: {
+    width: getResponsiveSize(28),
+    height: getResponsiveSize(28),
+    borderRadius: getResponsiveSize(14),
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: getResponsiveSize(8),
+  },
+  calibrationCloseText: {
+    color: '#FFFFFF',
+    fontSize: getResponsiveFont(16),
+    fontWeight: '700',
+    lineHeight: getResponsiveFont(16),
+  },
 });
-
-

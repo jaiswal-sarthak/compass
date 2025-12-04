@@ -23,6 +23,19 @@ import {
   MapLayerIcon 
 } from './svgs';
 import * as Location from 'expo-location';
+import {
+  latLngToXY,
+  xyToLatLng,
+  averageCenter,
+  sortCornersAsRect,
+  createGridLinesXY,
+  getCellCenterXY,
+  getCellCornersXY,
+} from '../utils/mapUtils';
+import {
+  VASTU_GRID_9X9,
+  getBrahmasthanCells,
+} from '../utils/vastuGrid';
 
 // Conditional imports for native vs web
 let MapView, Marker;
@@ -83,6 +96,18 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
   const [pressedButton, setPressedButton] = useState(null);
   const mapContainerRef = useRef(null);
   const googleMapRef = useRef(null);
+  
+  // Vastu Grid state
+  const [plotCorners, setPlotCorners] = useState([]);
+  const [cornerSelectionMode, setCornerSelectionMode] = useState(false);
+  const [showVastuGrid, setShowVastuGrid] = useState(false);
+  const [showDevtaLabels, setShowDevtaLabels] = useState(true);
+  const [highlightBrahmasthan, setHighlightBrahmasthan] = useState(true);
+  const gridLayersRef = useRef([]);
+  const plotCornersRef = useRef([]);
+  const cornerSelectionModeRef = useRef(false);
+  const [mapReady, setMapReady] = useState(false);
+  const cornerMarkersRef = useRef([]);
 
   useEffect(() => {
     if (visible) {
@@ -103,7 +128,13 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
       // Reset states
       setShowLocationSearch(false);
       setMapLocation(null);
-      setLoading(true); // Reset loading state for next open
+      setLoading(true);
+      setMapReady(false);
+      setPlotCorners([]);
+      setShowVastuGrid(false);
+      setCornerSelectionMode(false);
+      cornerMarkersRef.current = [];
+      gridLayersRef.current = [];
     }
   }, [visible]);
 
@@ -219,6 +250,338 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
     }
   };
 
+  // Draw Vastu Grid on map
+  const drawVastuGrid = () => {
+    if (!googleMapRef.current || plotCorners.length !== 4 || !window.L) return;
+    
+    // Clear previous grid layers
+    gridLayersRef.current.forEach(layer => {
+      if (googleMapRef.current) {
+        googleMapRef.current.removeLayer(layer);
+      }
+    });
+    gridLayersRef.current = [];
+    
+    try {
+      const center = averageCenter(plotCorners);
+      const xyCorners = plotCorners.map(p => latLngToXY(center, p));
+      const rectXY = sortCornersAsRect(xyCorners);
+      const { verticalLines, horizontalLines } = createGridLinesXY(rectXY);
+      
+      // Draw plot outline
+      const plotLatLngs = plotCorners.map(p => [p.latitude, p.longitude]);
+      const plotPolygon = window.L.polygon([...plotLatLngs, plotLatLngs[0]], {
+        color: '#F4C430',
+        fillColor: 'transparent',
+        weight: 3,
+        opacity: 0.9,
+      }).addTo(googleMapRef.current);
+      gridLayersRef.current.push(plotPolygon);
+      
+      // Draw vertical grid lines
+      verticalLines.forEach((line) => {
+        const latLngs = line.map(p => {
+          const coord = xyToLatLng(center, p.x, p.y);
+          return [coord.latitude, coord.longitude];
+        });
+        const polyline = window.L.polyline(latLngs, {
+          color: '#F4C430',
+          weight: 1,
+          opacity: 0.6,
+        }).addTo(googleMapRef.current);
+        gridLayersRef.current.push(polyline);
+      });
+      
+      // Draw horizontal grid lines
+      horizontalLines.forEach((line) => {
+        const latLngs = line.map(p => {
+          const coord = xyToLatLng(center, p.x, p.y);
+          return [coord.latitude, coord.longitude];
+        });
+        const polyline = window.L.polyline(latLngs, {
+          color: '#F4C430',
+          weight: 1,
+          opacity: 0.6,
+        }).addTo(googleMapRef.current);
+        gridLayersRef.current.push(polyline);
+      });
+      
+      // Highlight Brahmasthan (center 9 cells)
+      if (highlightBrahmasthan) {
+        const brahmasthanCells = getBrahmasthanCells();
+        brahmasthanCells.forEach(({ row, col }) => {
+          const corners = getCellCornersXY(rectXY, row, col);
+          const latLngs = corners.map(p => {
+            const coord = xyToLatLng(center, p.x, p.y);
+            return [coord.latitude, coord.longitude];
+          });
+          const polygon = window.L.polygon(latLngs, {
+            color: '#FFA500',
+            fillColor: '#FFA500',
+            fillOpacity: 0.3,
+            weight: 2,
+          }).addTo(googleMapRef.current);
+          gridLayersRef.current.push(polygon);
+        });
+      }
+      
+      // Draw devta labels
+      if (showDevtaLabels) {
+        for (let row = 0; row < 9; row++) {
+          for (let col = 0; col < 9; col++) {
+            const devtaInfo = VASTU_GRID_9X9[row][col];
+            const cellCenter = getCellCenterXY(rectXY, row, col);
+            const coord = xyToLatLng(center, cellCenter.x, cellCenter.y);
+            
+            const devtaIcon = window.L.divIcon({
+              className: 'devta-label',
+              html: `<div style="
+                background: ${devtaInfo.color}DD;
+                color: white;
+                padding: 2px 6px;
+                border-radius: 4px;
+                font-size: 9px;
+                font-weight: bold;
+                white-space: nowrap;
+                border: 1px solid white;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+                text-align: center;
+              ">${devtaInfo.devta}<br/><span style="font-size: 7px;">${devtaInfo.zone}</span></div>`,
+              iconSize: [null, null],
+              iconAnchor: [0, 0]
+            });
+            
+            const marker = window.L.marker([coord.latitude, coord.longitude], {
+              icon: devtaIcon
+            }).addTo(googleMapRef.current);
+            
+            // Add tooltip with more info
+            marker.bindTooltip(`
+              <div style="text-align: center;">
+                <strong>${devtaInfo.devta}</strong><br/>
+                Zone: ${devtaInfo.zone}<br/>
+                Energy: ${devtaInfo.energy}
+              </div>
+            `, { direction: 'top' });
+            
+            gridLayersRef.current.push(marker);
+          }
+        }
+      }
+      
+      setShowVastuGrid(true);
+      console.log('✅ Vastu grid drawn successfully');
+    } catch (error) {
+      console.error('Error drawing Vastu grid:', error);
+    }
+  };
+  
+  // Sync refs with state
+  useEffect(() => {
+    plotCornersRef.current = plotCorners;
+  }, [plotCorners]);
+
+  useEffect(() => {
+    cornerSelectionModeRef.current = cornerSelectionMode;
+    console.log('📌 Corner selection mode changed to:', cornerSelectionMode);
+  }, [cornerSelectionMode]);
+
+  // Auto-place draggable corners - WORKS ON ALL WEB BROWSERS AND DEVICES
+  useEffect(() => {
+    // Only for web platform
+    if (Platform.OS !== 'web') {
+      console.log('⏭️ Skipping - not web platform');
+      return;
+    }
+    
+    console.log('🔍 Auto-placement effect triggered:', {
+      mapReady,
+      cornerSelectionMode,
+      hasWindow: typeof window !== 'undefined',
+      hasLeaflet: typeof window !== 'undefined' && !!window.L,
+      hasMap: !!googleMapRef.current,
+    });
+    
+    // Wait for all prerequisites
+    if (!mapReady || !googleMapRef.current) {
+      console.log('⏳ Waiting for map to be ready...');
+      return;
+    }
+    
+    if (typeof window === 'undefined' || !window.L) {
+      console.log('⏳ Waiting for Leaflet to load...');
+      return;
+    }
+    
+    // Clean up when mode is turned off
+    if (!cornerSelectionMode) {
+      console.log('🧹 Cleaning up corner markers (mode off)');
+      cornerMarkersRef.current.forEach(m => {
+        if (googleMapRef.current) {
+          try {
+            googleMapRef.current.removeLayer(m);
+          } catch (e) {
+            console.log('Cleanup error:', e);
+          }
+        }
+      });
+      cornerMarkersRef.current = [];
+      return;
+    }
+    
+    // Clear any existing corner markers first
+    console.log('🧹 Clearing old markers before placing new ones...');
+    cornerMarkersRef.current.forEach(m => {
+      if (googleMapRef.current) {
+        try {
+          googleMapRef.current.removeLayer(m);
+        } catch (e) {}
+      }
+    });
+    cornerMarkersRef.current = [];
+    
+    // Small delay to ensure map is fully rendered
+    setTimeout(() => {
+      if (!googleMapRef.current || !window.L) {
+        console.log('❌ Map or Leaflet not available in setTimeout');
+        return;
+      }
+      
+      const map = googleMapRef.current;
+      const center = map.getCenter();
+      
+      console.log('📍 Map center:', center);
+      
+      // Calculate offset - larger for visibility (about 50-100m)
+      const offset = 0.0008; // Increased for better visibility
+      
+      // Auto-place 4 corners in a square around current center
+      const autoCorners = [
+        { latitude: center.lat - offset, longitude: center.lng - offset, label: 'BL', name: 'Bottom-Left' },
+        { latitude: center.lat - offset, longitude: center.lng + offset, label: 'BR', name: 'Bottom-Right' },
+        { latitude: center.lat + offset, longitude: center.lng + offset, label: 'TR', name: 'Top-Right' },
+        { latitude: center.lat + offset, longitude: center.lng - offset, label: 'TL', name: 'Top-Left' },
+      ];
+      
+      console.log('🎯 PLACING 4 DRAGGABLE CORNER MARKERS:', autoCorners);
+      
+      // Create draggable markers for each corner
+      autoCorners.forEach((corner, index) => {
+        console.log(`Creating marker ${index + 1} at:`, corner);
+        
+        const cornerIcon = window.L.divIcon({
+          className: `corner-marker-${index}`,
+          html: `
+            <div style="
+              width: 50px;
+              height: 50px;
+              background: linear-gradient(135deg, #FF0000 0%, #CC0000 100%);
+              border: 6px solid white;
+              border-radius: 50%;
+              box-shadow: 0 6px 20px rgba(255,0,0,0.8), 0 0 0 2px #FF0000;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: white;
+              font-weight: 900;
+              font-size: 22px;
+              cursor: grab;
+              position: relative;
+            ">${index + 1}</div>
+          `,
+          iconSize: [50, 50],
+          iconAnchor: [25, 25],
+        });
+        
+        try {
+          const marker = window.L.marker([corner.latitude, corner.longitude], {
+            icon: cornerIcon,
+            draggable: true,
+            autoPan: true,
+            zIndexOffset: 10000,
+            riseOnHover: true,
+          }).addTo(map);
+          
+          console.log(`✅ Marker ${index + 1} ADDED to map`);
+          
+          // Drag events with visual feedback
+          marker.on('dragstart', () => {
+            console.log(`🎯 Started dragging corner ${index + 1}`);
+            marker.setOpacity(0.7);
+          });
+          
+          marker.on('drag', () => {
+            // Update in real-time during drag
+            const pos = marker.getLatLng();
+            const updatedCorners = [...plotCornersRef.current];
+            updatedCorners[index] = {
+              latitude: pos.lat,
+              longitude: pos.lng
+            };
+            plotCornersRef.current = updatedCorners;
+          });
+          
+          marker.on('dragend', () => {
+            const pos = marker.getLatLng();
+            const updatedCorners = [...plotCornersRef.current];
+            updatedCorners[index] = {
+              latitude: pos.lat,
+              longitude: pos.lng
+            };
+            setPlotCorners(updatedCorners);
+            marker.setOpacity(1.0);
+            console.log(`✅ Corner ${index + 1} placed at:`, { lat: pos.lat, lng: pos.lng });
+          });
+          
+          // Permanent tooltip showing corner info
+          marker.bindTooltip(`
+            <div style="
+              background: linear-gradient(135deg, #FF0000, #CC0000);
+              color: white;
+              padding: 8px 12px;
+              border-radius: 8px;
+              font-weight: bold;
+              font-size: 13px;
+              border: 3px solid white;
+              text-align: center;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            ">
+              <div style="font-size: 14px; margin-bottom: 2px;">Corner ${index + 1}</div>
+              <div style="font-size: 11px; opacity: 0.9;">${corner.name}</div>
+              <div style="font-size: 10px; margin-top: 4px; opacity: 0.8;">👆 Drag to adjust</div>
+            </div>
+          `, {
+            permanent: true,
+            direction: 'top',
+            offset: [0, -15],
+            className: 'corner-tooltip'
+          });
+          
+          cornerMarkersRef.current.push(marker);
+          
+        } catch (error) {
+          console.error(`❌ Error creating marker ${index + 1}:`, error);
+        }
+      });
+      
+      // Initialize corners state
+      const initialCorners = autoCorners.map(c => ({ latitude: c.latitude, longitude: c.longitude }));
+      setPlotCorners(initialCorners);
+      
+      console.log('🎉 ALL 4 DRAGGABLE CORNERS PLACED! Total markers:', cornerMarkersRef.current.length);
+      
+    }, 500); // 500ms delay to ensure map is fully ready
+    
+  }, [mapReady, cornerSelectionMode]);
+
+  // Effect to draw grid when corners are confirmed (selection mode OFF)
+  useEffect(() => {
+    if (plotCorners.length === 4 && googleMapRef.current && !cornerSelectionMode) {
+      console.log('🎨 Drawing Vastu grid with corners:', plotCorners);
+      drawVastuGrid();
+    }
+  }, [plotCorners, showDevtaLabels, highlightBrahmasthan, cornerSelectionMode]);
+
   const initializeLeafletMap = () => {
     let retryCount = 0;
     const maxRetries = 100; // Try for 10 seconds
@@ -243,7 +606,25 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
           // Create map
           const map = window.L.map(mapContainerRef.current, {
             zoomControl: false, // We'll add custom controls
+            tap: true, // Enable tap events
+            touchZoom: true,
+            scrollWheelZoom: true,
+            doubleClickZoom: true,
+            boxZoom: true,
+            keyboard: true,
+            dragging: true,
           }).setView([locationToUse.latitude, locationToUse.longitude], 18);
+          
+          console.log('✅ Map created, adding event listeners...');
+          console.log('Map object:', map);
+          console.log('Map container:', mapContainerRef.current);
+          
+          // Add simple test handler first
+          setTimeout(() => {
+            console.log('⏰ Setting up click handler after 1 second...');
+            console.log('Current cornerSelectionModeRef:', cornerSelectionModeRef.current);
+            console.log('Current plotCornersRef:', plotCornersRef.current);
+          }, 1000);
 
           // Add tile layer based on map type
           let tileLayer;
@@ -291,8 +672,9 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
           marker.bindPopup('Current Location').openPopup();
 
           googleMapRef.current = map;
+          setMapReady(true);
           
-          console.log('Leaflet map initialized successfully');
+          console.log('✅ Leaflet map initialized successfully, mapReady set to true');
         } catch (error) {
           console.error('Error initializing Leaflet:', error);
           // Show error message
@@ -394,6 +776,9 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
                 width: '100%',
                 height: '100%',
                 backgroundColor: '#E5E5E5',
+                position: 'relative',
+                zIndex: 1,
+                cursor: cornerSelectionMode ? 'crosshair' : 'grab',
               }}
             >
               {/* Fallback message if Google Maps doesn't load */}
@@ -475,7 +860,7 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
         )}
 
         {/* Compass Overlay - Toggle visibility */}
-        {showCompass && locationToUse && (
+        {showCompass && locationToUse && !cornerSelectionMode && (
           <View style={[styles.compassOverlay, { pointerEvents: 'none', zIndex: 500, opacity: 0.6 }]}>
             <CompassView
               mode={mode}
@@ -488,18 +873,20 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
         )}
 
         {/* Top Navigation Bar - Same as compass view */}
-        <View style={styles.topBarContainer}>
-          <CompassTopBar
-            onMenuPress={() => {}} // Disabled in map view
-            onSearchPress={() => setShowLocationSearch(!showLocationSearch)}
-            onBackPress={onClose}
-          />
+        <View style={[styles.topBarContainer, { pointerEvents: 'box-none' }]}>
+          <View style={{ pointerEvents: 'auto' }}>
+            <CompassTopBar
+              onMenuPress={() => {}} // Disabled in map view
+              onSearchPress={() => setShowLocationSearch(!showLocationSearch)}
+              onBackPress={onClose}
+            />
+          </View>
           
           {/* Map Controls */}
-          <View style={styles.mapControls}>
+          <View style={[styles.mapControls, { pointerEvents: 'box-none' }]}>
              {/* Compass Toggle Button */}
              <TouchableOpacity
-               style={[styles.mapControlButton, showCompass && styles.mapControlButtonActive]}
+               style={[styles.mapControlButton, showCompass && styles.mapControlButtonActive, { pointerEvents: 'auto' }]}
                onPress={() => setShowCompass(!showCompass)}
                onPressIn={() => setPressedButton('compass')}
                onPressOut={() => setPressedButton(null)}
@@ -523,8 +910,165 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
                  {mapType === 'satellite' ? '🗺️' : '🛰️'}
                </Text>
              </TouchableOpacity>
+             
+             {/* Vastu Grid Toggle - Corner Selection */}
+             {!showVastuGrid && (
+               <TouchableOpacity
+                 style={[styles.mapControlButton, cornerSelectionMode && styles.mapControlButtonActive]}
+                 onPress={() => {
+                   const newMode = !cornerSelectionMode;
+                   console.log('🔄 Toggling corner selection mode:', newMode);
+                   setCornerSelectionMode(newMode);
+                   
+                   if (isMapLocked && newMode) {
+                     // Auto-unlock map when starting selection
+                     setIsMapLocked(false);
+                     if (googleMapRef.current && window.L) {
+                       googleMapRef.current.dragging.enable();
+                       googleMapRef.current.touchZoom.enable();
+                       googleMapRef.current.doubleClickZoom.enable();
+                       googleMapRef.current.scrollWheelZoom.enable();
+                       console.log('🔓 Map unlocked for corner selection');
+                     }
+                   }
+                 }}
+                 onPressIn={() => setPressedButton('vastu')}
+                 onPressOut={() => setPressedButton(null)}
+                 activeOpacity={0.6}
+               >
+                 <Text style={[styles.mapControlButtonText, pressedButton === 'vastu' && { opacity: 0.7 }]}>
+                   {cornerSelectionMode ? '📍' : '⬜'}
+                 </Text>
+               </TouchableOpacity>
+             )}
+             
+             {/* Apply Grid Button - Show when corners are being adjusted */}
+             {cornerSelectionMode && plotCorners.length === 4 && (
+               <TouchableOpacity
+                 style={[styles.mapControlButton, styles.applyButton]}
+                 onPress={() => {
+                   console.log('✅ Applying Vastu grid with final corners:', plotCorners);
+                   // Remove corner tooltips (make them non-permanent)
+                   cornerMarkersRef.current.forEach(marker => {
+                     if (marker && marker.unbindTooltip) {
+                       marker.unbindTooltip();
+                     }
+                   });
+                   setCornerSelectionMode(false);
+                   // Grid will be drawn by the existing useEffect
+                 }}
+                 onPressIn={() => setPressedButton('apply')}
+                 onPressOut={() => setPressedButton(null)}
+                 activeOpacity={0.6}
+               >
+                 <Text style={[styles.applyButtonText, pressedButton === 'apply' && { opacity: 0.7 }]}>
+                   ✓
+                 </Text>
+               </TouchableOpacity>
+             )}
+             
+             {/* Clear Grid Button - Show when grid exists */}
+             {showVastuGrid && (
+               <TouchableOpacity
+                 style={styles.mapControlButton}
+                 onPress={() => {
+                   console.log('🗑️ Clearing grid and corners');
+                   // Clear all grid layers
+                   gridLayersRef.current.forEach(layer => {
+                     if (googleMapRef.current) {
+                       googleMapRef.current.removeLayer(layer);
+                     }
+                   });
+                   gridLayersRef.current = [];
+                   setPlotCorners([]);
+                   setShowVastuGrid(false);
+                   setCornerSelectionMode(false);
+                 }}
+                 onPressIn={() => setPressedButton('clear')}
+                 onPressOut={() => setPressedButton(null)}
+                 activeOpacity={0.6}
+               >
+                 <Text style={[styles.mapControlButtonText, pressedButton === 'clear' && { opacity: 0.7 }]}>
+                   🗑️
+                 </Text>
+               </TouchableOpacity>
+             )}
+             
+             {/* Toggle Devta Labels - Show when grid exists */}
+             {showVastuGrid && (
+               <TouchableOpacity
+                 style={[styles.mapControlButton, showDevtaLabels && styles.mapControlButtonActive]}
+                 onPress={() => setShowDevtaLabels(!showDevtaLabels)}
+                 onPressIn={() => setPressedButton('labels')}
+                 onPressOut={() => setPressedButton(null)}
+                 activeOpacity={0.6}
+               >
+                 <Text style={[styles.mapControlButtonText, pressedButton === 'labels' && { opacity: 0.7 }]}>
+                   🏷️
+                 </Text>
+               </TouchableOpacity>
+             )}
+             
+             {/* Toggle Brahmasthan - Show when grid exists */}
+             {showVastuGrid && (
+               <TouchableOpacity
+                 style={[styles.mapControlButton, highlightBrahmasthan && styles.mapControlButtonActive]}
+                 onPress={() => setHighlightBrahmasthan(!highlightBrahmasthan)}
+                 onPressIn={() => setPressedButton('brahma')}
+                 onPressOut={() => setPressedButton(null)}
+                 activeOpacity={0.6}
+               >
+                 <Text style={[styles.mapControlButtonText, pressedButton === 'brahma' && { opacity: 0.7 }]}>
+                   🕉️
+                 </Text>
+               </TouchableOpacity>
+             )}
           </View>
         </View>
+
+        {/* Corner Selection Info Banner */}
+        {cornerSelectionMode && (
+          <View style={[styles.cornerSelectionBanner, { pointerEvents: 'box-none' }]}>
+            <View style={styles.pulseIndicator}>
+              <View style={styles.pulseDot} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cornerSelectionTitle}>
+                🎯 ADJUST PLOT CORNERS
+              </Text>
+              <Text style={styles.cornerSelectionText}>
+                👆 Drag red numbered dots (1→4) to mark your plot boundaries
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.cornerCancelButton, { pointerEvents: 'auto' }]}
+              onPress={() => {
+                setCornerSelectionMode(false);
+                // Clear corners and grid when closing
+                gridLayersRef.current.forEach(layer => {
+                  if (googleMapRef.current) {
+                    googleMapRef.current.removeLayer(layer);
+                  }
+                });
+                gridLayersRef.current = [];
+                setPlotCorners([]);
+                setShowVastuGrid(false);
+              }}
+            >
+              <Text style={styles.cornerCancelText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        
+        {/* Vastu Grid Info Banner */}
+        {showVastuGrid && plotCorners.length === 4 && (
+          <View style={styles.vastuInfoBanner}>
+            <Text style={styles.vastuInfoTitle}>✨ Vastu Grid Active</Text>
+            <Text style={styles.vastuInfoText}>
+              🕉️ Brahmasthan (sacred center) highlighted
+            </Text>
+          </View>
+        )}
 
         {/* Location Search Overlay */}
         {showLocationSearch && (
@@ -737,6 +1281,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 500,
+    pointerEvents: 'none', // Never block map clicks
   },
   topBarContainer: {
     position: 'absolute',
@@ -744,6 +1289,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 1000,
+    pointerEvents: 'box-none', // Allow clicks through to map
   },
   mapControls: {
     position: 'absolute',
@@ -767,10 +1313,24 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
+    pointerEvents: 'auto', // Ensure buttons are clickable
   },
   mapControlButtonActive: {
     borderColor: '#F4C430',
     backgroundColor: '#FFE082',
+  },
+  applyButton: {
+    backgroundColor: 'rgba(76, 175, 80, 0.98)',
+    borderColor: '#4CAF50',
+    borderWidth: 4,
+    width: getResponsiveSize(56),
+    height: getResponsiveSize(56),
+    borderRadius: getResponsiveSize(28),
+  },
+  applyButtonText: {
+    fontSize: getResponsiveFont(28),
+    color: '#FFFFFF',
+    fontWeight: '900',
   },
   mapControlButtonText: {
     fontSize: getResponsiveFont(22),
@@ -863,6 +1423,91 @@ const styles = StyleSheet.create({
   },
   bottomButtonIcon: {
     fontSize: getResponsiveFont(24),
+  },
+  cornerSelectionBanner: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? getResponsiveSize(140) : getResponsiveSize(130),
+    left: getResponsiveSize(15),
+    right: getResponsiveSize(140),
+    backgroundColor: 'rgba(255, 69, 0, 0.98)',
+    borderRadius: getResponsiveSize(12),
+    padding: getResponsiveSize(14),
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    zIndex: 999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: getResponsiveSize(10),
+  },
+  pulseIndicator: {
+    width: getResponsiveSize(12),
+    height: getResponsiveSize(12),
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pulseDot: {
+    width: getResponsiveSize(12),
+    height: getResponsiveSize(12),
+    borderRadius: getResponsiveSize(6),
+    backgroundColor: '#FFFFFF',
+  },
+  cornerSelectionTitle: {
+    fontSize: getResponsiveFont(15),
+    fontWeight: '900',
+    color: '#FFFFFF',
+    marginBottom: getResponsiveSize(3),
+    letterSpacing: 0.5,
+  },
+  cornerSelectionText: {
+    fontSize: getResponsiveFont(12),
+    color: 'rgba(255, 255, 255, 0.95)',
+    fontWeight: '700',
+  },
+  cornerCancelButton: {
+    width: getResponsiveSize(28),
+    height: getResponsiveSize(28),
+    borderRadius: getResponsiveSize(14),
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cornerCancelText: {
+    color: '#FFFFFF',
+    fontSize: getResponsiveFont(18),
+    fontWeight: '700',
+  },
+  vastuInfoBanner: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? getResponsiveSize(140) : getResponsiveSize(130),
+    left: getResponsiveSize(15),
+    right: getResponsiveSize(80),
+    backgroundColor: 'rgba(65, 105, 225, 0.95)',
+    borderRadius: getResponsiveSize(10),
+    padding: getResponsiveSize(10),
+    borderWidth: 2,
+    borderColor: '#4169E1',
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    zIndex: 999,
+  },
+  vastuInfoTitle: {
+    fontSize: getResponsiveFont(13),
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: getResponsiveSize(3),
+  },
+  vastuInfoText: {
+    fontSize: getResponsiveFont(10),
+    color: 'rgba(255, 255, 255, 0.95)',
+    fontWeight: '600',
   },
 });
 

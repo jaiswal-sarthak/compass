@@ -13,6 +13,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Updates from 'expo-updates';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -22,6 +23,7 @@ import Animated, {
   withDelay,
   interpolate,
   Easing,
+  runOnJS,
 } from 'react-native-reanimated';
 import CompassView from './components/CompassView';
 import LocationSearch from './components/LocationSearch';
@@ -144,6 +146,42 @@ export default function App() {
   const menuVisible = useSharedValue(0);
   const compassInitialRotation = useSharedValue(0);
 
+  // Auto-update check and cache clearance
+  useEffect(() => {
+    async function checkForUpdates() {
+      try {
+        // For web: Clear cache on page reload (except AsyncStorage for images)
+        if (Platform.OS === 'web') {
+          // Clear all caches except localStorage (where images are stored)
+          if ('caches' in window) {
+            const cacheNames = await caches.keys();
+            await Promise.all(
+              cacheNames.map(cacheName => caches.delete(cacheName))
+            );
+          }
+          
+          // Add cache-busting timestamp to prevent browser caching
+          const timestamp = new Date().getTime();
+          sessionStorage.setItem('lastCacheCleared', timestamp.toString());
+        }
+
+        // Check for Expo updates
+        if (!__DEV__) {
+          const update = await Updates.checkForUpdateAsync();
+          if (update.isAvailable) {
+            await Updates.fetchUpdateAsync();
+            // Reload to apply the update
+            await Updates.reloadAsync();
+          }
+        }
+      } catch (error) {
+        console.log('Update check failed:', error);
+      }
+    }
+
+    checkForUpdates();
+  }, []);
+
   useEffect(() => {
     // Only run loading animation when not on home screen
     if (!showHomeScreen) {
@@ -155,8 +193,8 @@ export default function App() {
         if (finished) {
           // After rotation completes, pause briefly then show other components
           setTimeout(() => {
-            setIsLoading(false);
-    menuVisible.value = withSpring(1, { damping: 15, stiffness: 100 });
+            runOnJS(setIsLoading)(false);
+            menuVisible.value = withSpring(1, { damping: 15, stiffness: 100 });
           }, 300); // 300ms pause
         }
       });
@@ -263,7 +301,7 @@ export default function App() {
           }, (finished) => {
             if (finished) {
               setTimeout(() => {
-                setIsLoading(false);
+                runOnJS(setIsLoading)(false);
                 menuVisible.value = withSpring(1, { damping: 15, stiffness: 100 });
               }, 300);
             }
