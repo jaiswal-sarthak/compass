@@ -47,6 +47,12 @@ export default function CameraCapture({ onCapture, onClose, visible, mode = 'nor
     { x: width * 0.85, y: height * 0.75 }, // Bottom-Right
     { x: width * 0.15, y: height * 0.75 }, // Bottom-Left
   ]);
+  
+  // Drag state for corner markers
+  const dragStateRef = useRef({
+    activeIndex: null,
+    offset: { x: 0, y: 0 },
+  });
 
   React.useEffect(() => {
     if (permission === null) {
@@ -200,6 +206,56 @@ export default function CameraCapture({ onCapture, onClose, visible, mode = 'nor
                 </View>
               )}
 
+              {/* Draggable corner markers - Outside SVG for better touch handling */}
+              {showVastuGrid && gridCorners.map((corner, i) => {
+                const handleResponderGrant = (event) => {
+                  const { pageX, pageY } = event.nativeEvent;
+                  dragStateRef.current = {
+                    activeIndex: i,
+                    offset: {
+                      x: pageX - corner.x,
+                      y: pageY - corner.y,
+                    },
+                  };
+                };
+                
+                const handleResponderMove = (event) => {
+                  if (dragStateRef.current.activeIndex !== i) return;
+                  const { pageX, pageY } = event.nativeEvent;
+                  const newCorners = [...gridCorners];
+                  newCorners[i] = {
+                    x: Math.max(20, Math.min(width - 20, pageX - dragStateRef.current.offset.x)),
+                    y: Math.max(50, Math.min(height - 150, pageY - dragStateRef.current.offset.y)),
+                  };
+                  setGridCorners(newCorners);
+                };
+                
+                const handleResponderRelease = () => {
+                  dragStateRef.current.activeIndex = null;
+                };
+                
+                return (
+                  <View
+                    key={`corner-${i}`}
+                    style={[
+                      styles.draggableCorner,
+                      {
+                        left: corner.x - 20,
+                        top: corner.y - 20,
+                      },
+                    ]}
+                    onStartShouldSetResponder={() => true}
+                    onMoveShouldSetResponder={() => true}
+                    onResponderGrant={handleResponderGrant}
+                    onResponderMove={handleResponderMove}
+                    onResponderRelease={handleResponderRelease}
+                    onResponderTerminate={handleResponderRelease}
+                  >
+                    <View style={styles.cornerDot} />
+                  </View>
+                );
+              })}
+
               {/* Vastu Grid Overlay */}
               {showVastuGrid && (
                 <Svg style={styles.gridSvg} width={width} height={height}>
@@ -240,7 +296,163 @@ export default function CameraCapture({ onCapture, onClose, visible, mode = 'nor
                     fill="none"
                   />
                   
-                  {/* Brahmasthan highlight (center cell) */}
+                  {/* OUTER LAYER - Perimeter cells (9x9 grid outer ring) */}
+                  {showOuterLayer && (
+                    <>
+                      {/* Top row outer cells */}
+                      {[0, 1, 2, 6, 7, 8].map((col) => (
+                        <Rect
+                          key={`outer-top-${col}`}
+                          x={gridCorners[0].x + (gridCorners[1].x - gridCorners[0].x) * (col / 9)}
+                          y={gridCorners[0].y}
+                          width={(gridCorners[1].x - gridCorners[0].x) / 9}
+                          height={(gridCorners[3].y - gridCorners[0].y) / 9}
+                          fill="#8B4513"
+                          fillOpacity="0.2"
+                          stroke="#A0522D"
+                          strokeWidth="1"
+                        />
+                      ))}
+                      {/* Bottom row outer cells */}
+                      {[0, 1, 2, 6, 7, 8].map((col) => (
+                        <Rect
+                          key={`outer-bottom-${col}`}
+                          x={gridCorners[0].x + (gridCorners[1].x - gridCorners[0].x) * (col / 9)}
+                          y={gridCorners[0].y + (gridCorners[3].y - gridCorners[0].y) * (8 / 9)}
+                          width={(gridCorners[1].x - gridCorners[0].x) / 9}
+                          height={(gridCorners[3].y - gridCorners[0].y) / 9}
+                          fill="#8B4513"
+                          fillOpacity="0.2"
+                          stroke="#A0522D"
+                          strokeWidth="1"
+                        />
+                      ))}
+                      {/* Left column outer cells */}
+                      {[1, 2, 6, 7].map((row) => (
+                        <Rect
+                          key={`outer-left-${row}`}
+                          x={gridCorners[0].x}
+                          y={gridCorners[0].y + (gridCorners[3].y - gridCorners[0].y) * (row / 9)}
+                          width={(gridCorners[1].x - gridCorners[0].x) / 9}
+                          height={(gridCorners[3].y - gridCorners[0].y) / 9}
+                          fill="#8B4513"
+                          fillOpacity="0.2"
+                          stroke="#A0522D"
+                          strokeWidth="1"
+                        />
+                      ))}
+                      {/* Right column outer cells */}
+                      {[1, 2, 6, 7].map((row) => (
+                        <Rect
+                          key={`outer-right-${row}`}
+                          x={gridCorners[0].x + (gridCorners[1].x - gridCorners[0].x) * (8 / 9)}
+                          y={gridCorners[0].y + (gridCorners[3].y - gridCorners[0].y) * (row / 9)}
+                          width={(gridCorners[1].x - gridCorners[0].x) / 9}
+                          height={(gridCorners[3].y - gridCorners[0].y) / 9}
+                          fill="#8B4513"
+                          fillOpacity="0.2"
+                          stroke="#A0522D"
+                          strokeWidth="1"
+                        />
+                      ))}
+                    </>
+                  )}
+                  
+                  {/* MIDDLE LAYER - 8 cells around center (positions: N, E, S, W, NW, NE, SW, SE) */}
+                  {showMiddleLayer && (
+                    <>
+                      {/* North */}
+                      <Rect
+                        x={gridCorners[0].x + (gridCorners[1].x - gridCorners[0].x) * (3 / 9)}
+                        y={gridCorners[0].y + (gridCorners[3].y - gridCorners[0].y) * (2 / 9)}
+                        width={(gridCorners[1].x - gridCorners[0].x) / 3}
+                        height={(gridCorners[3].y - gridCorners[0].y) / 9}
+                        fill="#4169E1"
+                        fillOpacity="0.25"
+                        stroke="#1E90FF"
+                        strokeWidth="2"
+                      />
+                      {/* East */}
+                      <Rect
+                        x={gridCorners[0].x + (gridCorners[1].x - gridCorners[0].x) * (6 / 9)}
+                        y={gridCorners[0].y + (gridCorners[3].y - gridCorners[0].y) * (3 / 9)}
+                        width={(gridCorners[1].x - gridCorners[0].x) / 9}
+                        height={(gridCorners[3].y - gridCorners[0].y) / 3}
+                        fill="#4169E1"
+                        fillOpacity="0.25"
+                        stroke="#1E90FF"
+                        strokeWidth="2"
+                      />
+                      {/* South */}
+                      <Rect
+                        x={gridCorners[0].x + (gridCorners[1].x - gridCorners[0].x) * (3 / 9)}
+                        y={gridCorners[0].y + (gridCorners[3].y - gridCorners[0].y) * (6 / 9)}
+                        width={(gridCorners[1].x - gridCorners[0].x) / 3}
+                        height={(gridCorners[3].y - gridCorners[0].y) / 9}
+                        fill="#4169E1"
+                        fillOpacity="0.25"
+                        stroke="#1E90FF"
+                        strokeWidth="2"
+                      />
+                      {/* West */}
+                      <Rect
+                        x={gridCorners[0].x + (gridCorners[1].x - gridCorners[0].x) * (2 / 9)}
+                        y={gridCorners[0].y + (gridCorners[3].y - gridCorners[0].y) * (3 / 9)}
+                        width={(gridCorners[1].x - gridCorners[0].x) / 9}
+                        height={(gridCorners[3].y - gridCorners[0].y) / 3}
+                        fill="#4169E1"
+                        fillOpacity="0.25"
+                        stroke="#1E90FF"
+                        strokeWidth="2"
+                      />
+                      {/* Northwest */}
+                      <Rect
+                        x={gridCorners[0].x + (gridCorners[1].x - gridCorners[0].x) * (2 / 9)}
+                        y={gridCorners[0].y + (gridCorners[3].y - gridCorners[0].y) * (2 / 9)}
+                        width={(gridCorners[1].x - gridCorners[0].x) / 9}
+                        height={(gridCorners[3].y - gridCorners[0].y) / 9}
+                        fill="#4169E1"
+                        fillOpacity="0.25"
+                        stroke="#1E90FF"
+                        strokeWidth="2"
+                      />
+                      {/* Northeast */}
+                      <Rect
+                        x={gridCorners[0].x + (gridCorners[1].x - gridCorners[0].x) * (6 / 9)}
+                        y={gridCorners[0].y + (gridCorners[3].y - gridCorners[0].y) * (2 / 9)}
+                        width={(gridCorners[1].x - gridCorners[0].x) / 9}
+                        height={(gridCorners[3].y - gridCorners[0].y) / 9}
+                        fill="#4169E1"
+                        fillOpacity="0.25"
+                        stroke="#1E90FF"
+                        strokeWidth="2"
+                      />
+                      {/* Southwest */}
+                      <Rect
+                        x={gridCorners[0].x + (gridCorners[1].x - gridCorners[0].x) * (2 / 9)}
+                        y={gridCorners[0].y + (gridCorners[3].y - gridCorners[0].y) * (6 / 9)}
+                        width={(gridCorners[1].x - gridCorners[0].x) / 9}
+                        height={(gridCorners[3].y - gridCorners[0].y) / 9}
+                        fill="#4169E1"
+                        fillOpacity="0.25"
+                        stroke="#1E90FF"
+                        strokeWidth="2"
+                      />
+                      {/* Southeast */}
+                      <Rect
+                        x={gridCorners[0].x + (gridCorners[1].x - gridCorners[0].x) * (6 / 9)}
+                        y={gridCorners[0].y + (gridCorners[3].y - gridCorners[0].y) * (6 / 9)}
+                        width={(gridCorners[1].x - gridCorners[0].x) / 9}
+                        height={(gridCorners[3].y - gridCorners[0].y) / 9}
+                        fill="#4169E1"
+                        fillOpacity="0.25"
+                        stroke="#1E90FF"
+                        strokeWidth="2"
+                      />
+                    </>
+                  )}
+                  
+                  {/* CENTER LAYER - Brahmasthan (center cell) */}
                   {showCenterLayer && (
                     <Rect
                       x={gridCorners[0].x + (gridCorners[1].x - gridCorners[0].x) / 3}
@@ -254,19 +466,6 @@ export default function CameraCapture({ onCapture, onClose, visible, mode = 'nor
                     />
                   )}
                   
-                  {/* Draggable corner markers */}
-                  {gridCorners.map((corner, i) => (
-                    <Circle
-                      key={`corner-${i}`}
-                      cx={corner.x}
-                      cy={corner.y}
-                      r="20"
-                      fill="#FF0000"
-                      stroke="white"
-                      strokeWidth="4"
-                      opacity="0.9"
-                    />
-                  ))}
                 </Svg>
               )}
 
@@ -538,6 +737,27 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '900',
     color: '#2C2C2C',
+  },
+  draggableCorner: {
+    position: 'absolute',
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  cornerDot: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FF0000',
+    borderWidth: 4,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
+    elevation: 5,
   },
 });
 

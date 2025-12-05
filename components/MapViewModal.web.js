@@ -127,6 +127,7 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
       setCornerSelectionMode(false);
       cornerMarkersRef.current = [];
       gridLayersRef.current = [];
+      plotOutlineRef.current = null;
     }
   }, [visible]);
 
@@ -233,32 +234,50 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
 
   // Draw Vastu Grid - ENHANCED UI
   const drawVastuGrid = () => {
-    if (!googleMapRef.current || plotCorners.length !== 4 || !window.L) return;
-    
-    // Clear previous grid (except corner markers)
-    gridLayersRef.current.forEach(layer => {
-      if (googleMapRef.current && layer && !cornerMarkersRef.current.includes(layer)) {
-        try {
-          googleMapRef.current.removeLayer(layer);
-        } catch (e) {}
-      }
-    });
-    gridLayersRef.current = gridLayersRef.current.filter(l => cornerMarkersRef.current.includes(l));
-    
     try {
+      console.log('🎨 drawVastuGrid called');
+      if (!googleMapRef.current) {
+        console.log('❌ No map reference');
+        return;
+      }
+      if (plotCorners.length !== 4) {
+        console.log('❌ Not enough corners:', plotCorners.length);
+        return;
+      }
+      if (!window.L) {
+        console.log('❌ Leaflet not loaded');
+        return;
+      }
+      
+      console.log('✅ All checks passed, drawing grid...');
+      
+      // Clear previous grid (except corner markers)
+      gridLayersRef.current.forEach(layer => {
+        if (googleMapRef.current && layer && !cornerMarkersRef.current.includes(layer)) {
+          try {
+            googleMapRef.current.removeLayer(layer);
+          } catch (e) {
+            console.log('⚠️ Error removing layer:', e);
+          }
+        }
+      });
+      gridLayersRef.current = gridLayersRef.current.filter(l => cornerMarkersRef.current.includes(l));
+      
       const center = averageCenter(plotCorners);
       const xyCorners = plotCorners.map(p => latLngToXY(center, p));
       const rectXY = sortCornersAsRect(xyCorners);
+      console.log('📐 Grid calculations done');
       const { verticalLines, horizontalLines } = createGridLinesXY(rectXY);
       
-      // 1. Draw plot outline with gradient border
+      // 1. Draw plot outline with enhanced styling
       const plotOutline = plotCorners.map(p => [p.latitude, p.longitude]);
       const outline = window.L.polygon([...plotOutline, plotOutline[0]], {
         color: '#FFD700',
-        weight: 4,
+        weight: 3,
         fillColor: 'transparent',
-        opacity: 1,
-        dashArray: '10, 5',
+        opacity: 0.9,
+        dashArray: '12, 6',
+        lineCap: 'round',
       }).addTo(googleMapRef.current);
       gridLayersRef.current.push(outline);
       
@@ -266,7 +285,7 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
       const [BL, BR, TR, TL] = rectXY;
       const divisions = [0, 1/3, 2/3, 1];
       
-      // Draw main 3x3 division lines (THICK GOLDEN)
+      // Draw main 3x3 division lines with improved styling
       divisions.forEach((t, idx) => {
         // Vertical lines
         const bottomPoint = interpolate(BL, BR, t);
@@ -277,11 +296,13 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
         });
         const isMainBorder = idx === 0 || idx === 3;
         const isLayerBorder = idx === 1 || idx === 2;
-        window.L.polyline(vertLatLngs, {
+        const vLine = window.L.polyline(vertLatLngs, {
           color: isMainBorder ? '#FFD700' : '#F4C430',
-          weight: isMainBorder ? 5 : (isLayerBorder ? 3 : 2),
-          opacity: isMainBorder ? 1 : 0.85,
+          weight: isMainBorder ? 4 : (isLayerBorder ? 2.5 : 2),
+          opacity: isMainBorder ? 0.95 : 0.8,
+          lineCap: 'round',
         }).addTo(googleMapRef.current);
+        gridLayersRef.current.push(vLine);
         
         // Horizontal lines
         const leftPoint = interpolate(BL, TL, t);
@@ -292,8 +313,9 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
         });
         const hLine = window.L.polyline(horizLatLngs, {
           color: isMainBorder ? '#FFD700' : '#F4C430',
-          weight: isMainBorder ? 5 : (isLayerBorder ? 3 : 2),
-          opacity: isMainBorder ? 1 : 0.85,
+          weight: isMainBorder ? 4 : (isLayerBorder ? 2.5 : 2),
+          opacity: isMainBorder ? 0.95 : 0.8,
+          lineCap: 'round',
         }).addTo(googleMapRef.current);
         gridLayersRef.current.push(hLine);
       });
@@ -307,7 +329,7 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
           // Top strip subdivisions
           const topBottom = interpolate(BL, BR, i/9);
           const topTop = interpolate(interpolate(BL, TL, 1/3), interpolate(BR, TR, 1/3), i/9);
-          window.L.polyline([topBottom, topTop].map(p => {
+          const subLine = window.L.polyline([topBottom, topTop].map(p => {
             const coord = xyToLatLng(center, p.x, p.y);
             return [coord.latitude, coord.longitude];
           }), {
@@ -315,6 +337,7 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
             weight: 1,
             opacity: 0.5,
           }).addTo(googleMapRef.current);
+          gridLayersRef.current.push(subLine);
         }
       }
       
@@ -332,13 +355,14 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
           return [coord.latitude, coord.longitude];
         });
         
-        // Draw Brahmasthan rectangle
-        window.L.polygon(centerLatLngs, {
+        // Draw Brahmasthan rectangle with improved styling
+        const brahmasthanPoly = window.L.polygon(centerLatLngs, {
           color: '#FF8C00',
-          fillColor: '#FFA500',
-          fillOpacity: 0.5,
-          weight: 4,
+          fillColor: 'rgba(255, 165, 0, 0.35)',
+          fillOpacity: 1,
+          weight: 3,
         }).addTo(googleMapRef.current);
+        gridLayersRef.current.push(brahmasthanPoly);
         
         const brahmasthanCells = getBrahmasthanCells();
         
@@ -351,67 +375,166 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
           });
           const polygon = window.L.polygon(latLngs, {
             color: '#FF8C00',
-            fillColor: '#FFA500',
-            fillOpacity: 0.5,
-            weight: 2,
+            fillColor: 'rgba(255, 165, 0, 0.35)',
+            fillOpacity: 1,
+            weight: 1.5,
           }).addTo(googleMapRef.current);
           gridLayersRef.current.push(polygon);
         });
         
-        // Add OM symbol in center of Brahmasthan
+        // Add sacred geometry SVG icon in center of Brahmasthan
         const brahmasthanCenter = getCellCenterXY(rectXY, 4, 4);
         const centerCoord = xyToLatLng(center, brahmasthanCenter.x, brahmasthanCenter.y);
         
-        const omIcon = window.L.divIcon({
-          className: 'om-symbol',
-          html: `<div style="
-            width: 60px;
-            height: 60px;
-            background: radial-gradient(circle, #FFA500, #FF8C00);
-            border: 4px solid white;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 32px;
-            font-weight: 900;
-            box-shadow: 0 4px 16px rgba(255,165,0,0.8), 0 0 0 4px rgba(255,165,0,0.3);
-            animation: brahmaPulse 3s ease-in-out infinite;
-          ">ॐ</div>
-          <style>
-            @keyframes brahmaPulse {
-              0%, 100% { transform: scale(1); box-shadow: 0 4px 16px rgba(255,165,0,0.8), 0 0 0 4px rgba(255,165,0,0.3); }
-              50% { transform: scale(1.1); box-shadow: 0 6px 20px rgba(255,165,0,1), 0 0 0 8px rgba(255,165,0,0.5); }
-            }
-          </style>`,
-          iconSize: [60, 60],
-          iconAnchor: [30, 30],
+        // Calculate cell dimensions dynamically for responsive icon sizing
+        const cellCorners = getCellCornersXY(rectXY, 4, 4);
+        
+        // Convert cell corners to lat/lng for pixel calculation
+        const cellCornersLatLng = cellCorners.map(p => {
+          const coord = xyToLatLng(center, p.x, p.y);
+          return [coord.latitude, coord.longitude];
         });
         
-        const omMarker = window.L.marker([centerCoord.latitude, centerCoord.longitude], {
-          icon: omIcon,
-          zIndexOffset: 5000,
-        }).addTo(googleMapRef.current);
+        // Get pixel coordinates using Leaflet's projection
+        const cellBLPixel = googleMapRef.current.latLngToContainerPoint(cellCornersLatLng[0]);
+        const cellBRPixel = googleMapRef.current.latLngToContainerPoint(cellCornersLatLng[1]);
+        const cellTRPixel = googleMapRef.current.latLngToContainerPoint(cellCornersLatLng[2]);
+        const cellTLPixel = googleMapRef.current.latLngToContainerPoint(cellCornersLatLng[3]);
         
-        omMarker.bindTooltip(`
-          <div style="
-            background: linear-gradient(135deg, #FFA500, #FF8C00);
-            color: white;
-            padding: 10px 14px;
-            border-radius: 10px;
-            font-weight: bold;
-            font-size: 13px;
-            border: 3px solid white;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-            text-align: center;
-          ">
-            <div style="font-size: 16px; margin-bottom: 4px;">🕉️ Brahmasthan</div>
-            <div style="font-size: 11px; opacity: 0.95;">Sacred Center • Keep Open & Light</div>
-          </div>
-        `, { permanent: true, direction: 'center' });
+        // Calculate cell width and height in pixels
+        const cellWidthPixels = Math.sqrt(
+          Math.pow(cellBRPixel.x - cellBLPixel.x, 2) + Math.pow(cellBRPixel.y - cellBLPixel.y, 2)
+        );
+        const cellHeightPixels = Math.sqrt(
+          Math.pow(cellTLPixel.x - cellBLPixel.x, 2) + Math.pow(cellTLPixel.y - cellBLPixel.y, 2)
+        );
         
-        gridLayersRef.current.push(omMarker);
+        // Calculate icon size - need to leave significant room for surrounding labels
+        // Devta labels can be 50-100px wide, so icon must be much smaller
+        const minCellDimension = Math.min(cellWidthPixels, cellHeightPixels);
+        
+        // Labels are positioned at cell centers around the center cell
+        // They can extend significantly, so we need a large buffer
+        const labelBuffer = 40; // Space needed for labels (they can be 40-50px wide)
+        const availableSpace = Math.max(0, minCellDimension - (labelBuffer * 2));
+        
+        // Use a conservative percentage (25-30%) to ensure no overlap
+        // For very small cells, use even smaller percentage
+        let iconSizePercent = 0.3;
+        if (minCellDimension < 100) {
+          iconSizePercent = 0.25; // Even smaller for tiny cells
+        } else if (minCellDimension < 150) {
+          iconSizePercent = 0.28;
+        }
+        
+        const iconSizePixels = Math.max(15, Math.min(availableSpace * iconSizePercent, minCellDimension * iconSizePercent));
+        
+        // Clamp icon size between reasonable bounds (15px minimum, 60px maximum)
+        const containerSize = Math.max(15, Math.min(60, Math.round(iconSizePixels)));
+        
+        // Calculate SVG size (70% of container for proper padding)
+        const svgSize = Math.round(containerSize * 0.7);
+        const anchorOffset = Math.round(containerSize / 2);
+        
+        console.log(`📏 Cell: ${cellWidthPixels.toFixed(0)}x${cellHeightPixels.toFixed(0)}px, Min: ${minCellDimension.toFixed(0)}px, Available: ${availableSpace.toFixed(0)}px, Icon: ${containerSize}px`);
+        
+        // Create a simpler, more stable SVG icon with dynamic sizing
+        const gradientId = `sacredGrad${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const sacredIcon = window.L.divIcon({
+          className: 'brahmasthan-icon',
+          html: `<div style="width:${containerSize}px;height:${containerSize}px;display:flex;align-items:center;justify-content:center;position:relative;background:radial-gradient(circle, rgba(255,215,0,0.9) 0%, rgba(255,165,0,0.9) 50%, rgba(255,140,0,0.9) 100%);border-radius:50%;box-shadow:0 4px 16px rgba(255,140,0,0.6);">
+            <svg width="${svgSize}" height="${svgSize}" viewBox="0 0 50 50">
+              <defs>
+                <linearGradient id="${gradientId}" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#FFFFFF" stop-opacity="1" />
+                  <stop offset="100%" stop-color="#FFD700" stop-opacity="1" />
+                </linearGradient>
+                <filter id="dropShadow${gradientId}">
+                  <feGaussianBlur in="SourceAlpha" stdDeviation="1"/>
+                  <feOffset dx="0" dy="2" result="offsetblur"/>
+                  <feComponentTransfer>
+                    <feFuncA type="linear" slope="0.3"/>
+                  </feComponentTransfer>
+                  <feMerge>
+                    <feMergeNode/>
+                    <feMergeNode in="SourceGraphic"/>
+                  </feMerge>
+                </filter>
+              </defs>
+              
+              <circle cx="25" cy="25" r="22" fill="url(#${gradientId})" opacity="0.95" filter="url(#dropShadow${gradientId})"/>
+              
+              <circle cx="25" cy="25" r="16" fill="none" stroke="#FFFFFF" stroke-width="2" opacity="0.8"/>
+              <circle cx="25" cy="25" r="10" fill="none" stroke="#FFFFFF" stroke-width="1.5" opacity="0.7"/>
+              
+              <path d="M25 8 L27 18 L33 15 L29 22 L38 25 L29 28 L33 35 L27 32 L25 42 L23 32 L17 35 L21 28 L12 25 L21 22 L17 15 L23 18 Z" 
+                fill="#FFFFFF" opacity="0.9"/>
+              
+              <circle cx="25" cy="25" r="3" fill="#FFFFFF" opacity="1"/>
+            </svg>
+          </div>`,
+          iconSize: [containerSize, containerSize],
+          iconAnchor: [anchorOffset, anchorOffset],
+        });
+        
+        // Only add icon if cell is large enough to avoid overlap
+        if (containerSize >= 20 && minCellDimension > 60) {
+          const sacredMarker = window.L.marker([centerCoord.latitude, centerCoord.longitude], {
+            icon: sacredIcon,
+            zIndexOffset: 3000, // Lower z-index so labels drawn later appear above
+            interactive: false, // Make it non-interactive to reduce overlap issues
+          }).addTo(googleMapRef.current);
+          
+          gridLayersRef.current.push(sacredMarker);
+          
+          // Bind tooltip after marker is created
+          try {
+            // Make tooltip size responsive to icon size and cell size
+            // For smaller cells, make tooltip much smaller or hide it
+            const shouldShowTooltip = minCellDimension > 80; // Only show if cell is large enough
+            
+            if (shouldShowTooltip) {
+              const tooltipFontSize = containerSize < 30 ? '11px' : (containerSize < 45 ? '12px' : '13px');
+              const tooltipTitleSize = containerSize < 30 ? '14px' : (containerSize < 45 ? '15px' : '16px');
+              const tooltipSubSize = containerSize < 30 ? '9px' : '10px';
+              const tooltipPadding = containerSize < 30 ? '8px 12px' : (containerSize < 45 ? '9px 13px' : '10px 14px');
+              
+              // Position tooltip offset to avoid overlapping with labels
+              const tooltipOffset = containerSize < 30 ? [0, -containerSize - 10] : [0, -containerSize - 15];
+              
+              sacredMarker.bindTooltip(`
+                <div style="
+                  background: linear-gradient(135deg, #FFD700 0%, #FFA500 50%, #FF8C00 100%);
+                  color: white;
+                  padding: ${tooltipPadding};
+                  border-radius: 10px;
+                  font-weight: bold;
+                  font-size: ${tooltipFontSize};
+                  box-shadow: 0 4px 12px rgba(255,140,0,0.5);
+                  text-align: center;
+                  border: none;
+                  max-width: 180px;
+                ">
+                  <div style="font-size: ${tooltipTitleSize}; margin-bottom: 4px; font-weight: 900; letter-spacing: 0.5px;">✦ BRAHMASTHAN ✦</div>
+                  <div style="font-size: ${tooltipSubSize}; opacity: 0.95; font-weight: 600;">Sacred Center • Keep Open & Light</div>
+                </div>
+              `, { 
+                permanent: true, 
+                direction: 'top', 
+                offset: tooltipOffset,
+                className: 'brahmasthan-tooltip',
+                interactive: false
+              });
+            } else {
+              // For very small cells, use a minimal tooltip or none
+              console.log('⚠️ Cell too small for tooltip, hiding to avoid overlap');
+            }
+          } catch (tooltipError) {
+            console.log('⚠️ Error binding tooltip:', tooltipError);
+          }
+        } else {
+          console.log(`⚠️ Cell too small (${minCellDimension.toFixed(0)}px) - hiding Brahmasthan icon to avoid overlap`);
+        }
       }
       
       // 4. Draw 45 DEVTA LABELS (3-Layer System)
@@ -471,12 +594,12 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
         });
       }
       
-      // Helper function to create devta marker
+      // Helper function to create devta marker with improved styling
       function createDevtaMarker(devta, coord, layer) {
         const layerSizes = {
-          outer: { fontSize: 9, padding: '3px 6px', borderWidth: 2 },
-          middle: { fontSize: 11, padding: '4px 8px', borderWidth: 2.5 },
-          center: { fontSize: 14, padding: '6px 10px', borderWidth: 3 },
+          outer: { fontSize: 8, padding: '4px 7px', borderWidth: 1.5, borderRadius: '8px' },
+          middle: { fontSize: 10, padding: '5px 9px', borderWidth: 2, borderRadius: '10px' },
+          center: { fontSize: 13, padding: '7px 11px', borderWidth: 2.5, borderRadius: '12px' },
         };
         
         const size = layerSizes[layer];
@@ -484,31 +607,23 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
         const icon = window.L.divIcon({
           className: `devta-label-${layer}`,
           html: `<div style="
-            background: linear-gradient(135deg, ${devta.color}F5, ${devta.color}D0);
+            background: linear-gradient(135deg, ${devta.color}F8, ${devta.color}E0);
             color: white;
             padding: ${size.padding};
-            border-radius: ${layer === 'center' ? '8px' : '6px'};
+            border-radius: ${size.borderRadius};
             font-size: ${size.fontSize}px;
-            font-weight: ${layer === 'center' ? '900' : 'bold'};
+            font-weight: ${layer === 'center' ? '900' : '700'};
             white-space: nowrap;
-            border: ${size.borderWidth}px solid ${layer === 'center' ? '#FFD700' : 'white'};
-            box-shadow: 0 ${layer === 'center' ? '4' : '3'}px ${layer === 'center' ? '10' : '8'}px rgba(0,0,0,0.6);
+            border: ${size.borderWidth}px solid rgba(255, 255, 255, 0.85);
+            box-shadow: 0 ${layer === 'center' ? '4' : '2'}px ${layer === 'center' ? '12' : '8'}px rgba(0,0,0,0.5);
             text-align: center;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.5);
-            ${layer === 'center' ? 'animation: centerGlow 2s ease-in-out infinite;' : ''}
+            text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+            line-height: 1.3;
+            letter-spacing: 0.3px;
           ">
-            ${devta.devta}
-            <br/>
-            <span style="font-size: ${size.fontSize - 2}px; opacity: 0.9;">${devta.zone}</span>
-          </div>
-          ${layer === 'center' ? `
-            <style>
-              @keyframes centerGlow {
-                0%, 100% { box-shadow: 0 4px 10px rgba(255,215,0,0.6); }
-                50% { box-shadow: 0 6px 16px rgba(255,215,0,1), 0 0 0 4px rgba(255,215,0,0.3); }
-              }
-            </style>
-          ` : ''}`,
+            <div style="font-weight: 900;">${devta.devta}</div>
+            <div style="font-size: ${size.fontSize - 1.5}px; opacity: 0.85; margin-top: 1px;">${devta.zone}</div>
+          </div>`,
           iconSize: [null, null],
           iconAnchor: [0, 0]
         });
@@ -519,22 +634,22 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
         
         marker.bindTooltip(`
           <div style="
-            background: linear-gradient(135deg, ${devta.color}, ${devta.color}DD);
+            background: linear-gradient(135deg, ${devta.color}F5, ${devta.color}DD);
             color: white;
-            padding: 10px 14px;
-            border-radius: 10px;
+            padding: 12px 16px;
+            border-radius: 12px;
             font-weight: bold;
             font-size: 13px;
-            border: 3px solid white;
-            box-shadow: 0 4px 14px rgba(0,0,0,0.6);
+            border: 2px solid rgba(255, 255, 255, 0.9);
+            box-shadow: 0 6px 18px rgba(0,0,0,0.5);
             text-align: center;
           ">
-            <div style="font-size: 15px; margin-bottom: 5px; font-weight: 900;">${devta.devta}</div>
-            <div style="font-size: 11px; opacity: 0.95; margin: 3px 0;">Zone: ${devta.zone}</div>
-            <div style="font-size: 10px; opacity: 0.9;">Energy: ${devta.energy}</div>
-            <div style="font-size: 9px; margin-top: 5px; padding-top: 5px; border-top: 1px solid rgba(255,255,255,0.3); opacity: 0.85;">Layer: ${layer.toUpperCase()}</div>
+            <div style="font-size: 16px; margin-bottom: 6px; font-weight: 900; letter-spacing: 0.5px;">${devta.devta}</div>
+            <div style="font-size: 11px; opacity: 0.95; margin: 4px 0;">Zone: ${devta.zone}</div>
+            <div style="font-size: 10px; opacity: 0.9; margin: 3px 0;">Energy: ${devta.energy}</div>
+            <div style="font-size: 9px; margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.3); opacity: 0.85; text-transform: uppercase;">${layer} Layer</div>
           </div>
-        `, { direction: 'top', offset: [0, -5] });
+        `, { direction: 'top', offset: [0, -8], className: 'devta-tooltip' });
         
         gridLayersRef.current.push(marker);
       }
@@ -543,7 +658,10 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
       setShowGridBanner(true);
       console.log('✅ Vastu grid drawn with enhanced UI!');
     } catch (error) {
-      console.error('Grid error:', error);
+      console.error('❌ CRITICAL Grid error:', error);
+      console.error('Error stack:', error.stack);
+      // Don't let the error crash the component - show error to user
+      alert('Error drawing grid: ' + error.message);
     }
   };
 
@@ -588,16 +706,53 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
 
   // Effect to draw grid
   useEffect(() => {
+    console.log('🔍 Grid draw useEffect triggered');
+    console.log('  - plotCorners.length:', plotCorners.length);
+    console.log('  - googleMapRef.current:', !!googleMapRef.current);
+    console.log('  - cornerSelectionMode:', cornerSelectionMode);
+    
     if (plotCorners.length === 4 && googleMapRef.current && !cornerSelectionMode) {
-      console.log('🎨 Drawing grid with layers:', { outer: showOuterLayer, middle: showMiddleLayer, center: showCenterLayer });
-      // Remove plot outline before drawing grid
-      if (plotOutlineRef.current) {
+      console.log('🎨 All conditions met - Drawing grid with layers:', { 
+        outer: showOuterLayer, 
+        middle: showMiddleLayer, 
+        center: showCenterLayer 
+      });
+      
+      // Small delay to ensure corner markers are removed first
+      const timer = setTimeout(() => {
         try {
-          googleMapRef.current.removeLayer(plotOutlineRef.current);
-        } catch (e) {}
-        plotOutlineRef.current = null;
-      }
-      drawVastuGrid();
+          // Verify map still exists
+          if (!googleMapRef.current) {
+            console.error('❌ Map reference lost!');
+            return;
+          }
+          
+          // Remove plot outline before drawing grid
+          if (plotOutlineRef.current) {
+            try {
+              googleMapRef.current.removeLayer(plotOutlineRef.current);
+              console.log('🧹 Removed plot outline');
+            } catch (e) {
+              console.log('⚠️ Error removing plot outline:', e);
+            }
+            plotOutlineRef.current = null;
+          }
+          
+          // Draw grid with error handling
+          try {
+            drawVastuGrid();
+          } catch (gridError) {
+            console.error('❌ Error in drawVastuGrid:', gridError);
+            alert('Error drawing grid. Please try again.');
+          }
+        } catch (error) {
+          console.error('❌ Critical error in grid drawing useEffect:', error);
+        }
+      }, 100);
+      
+      return () => clearTimeout(timer);
+    } else {
+      console.log('⏸️ Not drawing grid - conditions not met');
     }
   }, [plotCorners, showOuterLayer, showMiddleLayer, showCenterLayer, cornerSelectionMode]);
 
@@ -635,42 +790,47 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
         const icon = window.L.divIcon({
           className: `corner-marker-${i}`,
           html: `
-            <div style="position: relative; width: 70px; height: 85px; cursor: grab;">
-              <svg width="70" height="70" viewBox="0 0 70 70">
+            <div style="position: relative; width: 75px; height: 90px; cursor: grab;">
+              <svg width="75" height="75" viewBox="0 0 75 75">
                 <defs>
-                  <radialGradient id="grad${i}" cx="35%" cy="35%">
-                    <stop offset="0%" style="stop-color:#FF9999;stop-opacity:1" />
-                    <stop offset="40%" style="stop-color:#FF3333;stop-opacity:1" />
-                    <stop offset="100%" style="stop-color:#CC0000;stop-opacity:1" />
+                  <radialGradient id="grad${i}" cx="40%" cy="40%">
+                    <stop offset="0%" stop-color="#FF6B6B" stop-opacity="1" />
+                    <stop offset="50%" stop-color="#FF3333" stop-opacity="1" />
+                    <stop offset="100%" stop-color="#E60000" stop-opacity="1" />
                   </radialGradient>
-                  <filter id="glow${i}">
-                    <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                  <filter id="glow${i}" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
                     <feMerge>
                       <feMergeNode in="coloredBlur"/>
                       <feMergeNode in="SourceGraphic"/>
                     </feMerge>
                   </filter>
+                  <filter id="shadow${i}">
+                    <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.4"/>
+                  </filter>
                 </defs>
                 
                 <!-- Pulsing outer ring -->
-                <circle cx="35" cy="35" r="32" fill="none" stroke="#FF0000" stroke-width="2" opacity="0.4">
-                  <animate attributeName="r" from="28" to="34" dur="2s" repeatCount="indefinite"/>
-                  <animate attributeName="opacity" from="0.6" to="0" dur="2s" repeatCount="indefinite"/>
+                <circle cx="37.5" cy="37.5" r="34" fill="none" stroke="#FF3333" stroke-width="2" opacity="0.5">
+                  <animate attributeName="r" from="30" to="36" dur="2.5s" repeatCount="indefinite"/>
+                  <animate attributeName="opacity" from="0.7" to="0" dur="2.5s" repeatCount="indefinite"/>
                 </circle>
                 
-                <!-- Main circle -->
-                <circle cx="35" cy="35" r="28" fill="url(#grad${i})" stroke="white" stroke-width="5" filter="url(#glow${i})"/>
+                <!-- Main circle with gradient -->
+                <circle cx="37.5" cy="37.5" r="30" fill="url(#grad${i})" stroke="white" stroke-width="4" filter="url(#glow${i})"/>
                 
-                <!-- Inner highlight -->
-                <circle cx="35" cy="35" r="24" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/>
+                <!-- Inner highlight circles -->
+                <circle cx="37.5" cy="37.5" r="25" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/>
+                <circle cx="37.5" cy="37.5" r="20" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
                 
                 <!-- Corner marker icon -->
-                <path d="M28 28h-8v8M42 28h8v8M42 42h8v-8M28 42h-8v-8" stroke="white" stroke-width="2" opacity="0.5"/>
+                <path d="M30 30h-7v7M45 30h7v7M45 45h7v-7M30 45h-7v-7" stroke="white" stroke-width="2.5" opacity="0.6" stroke-linecap="round"/>
                 
-                <!-- Number with shadow -->
-                <text x="35" y="42" text-anchor="middle" fill="white" 
-                  font-size="24" font-weight="900" font-family="Arial, sans-serif"
-                  style="paint-order: stroke; stroke: rgba(0,0,0,0.5); stroke-width: 3px;">${i + 1}</text>
+                <!-- Number with enhanced shadow -->
+                <text x="37.5" y="43" text-anchor="middle" fill="white" 
+                  font-size="26" font-weight="900" font-family="Arial, sans-serif"
+                  style="paint-order: stroke; stroke: rgba(0,0,0,0.6); stroke-width: 4px;"
+                  filter="url(#shadow${i})">${i + 1}</text>
               </svg>
               
               <!-- Enhanced label tag -->
@@ -679,22 +839,22 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
                 bottom: 0;
                 left: 50%;
                 transform: translateX(-50%);
-                background: linear-gradient(135deg, #FF0000 0%, #CC0000 100%);
+                background: linear-gradient(135deg, #FF3333 0%, #E60000 100%);
                 color: white;
-                padding: 4px 10px;
-                border-radius: 10px;
+                padding: 5px 12px;
+                border-radius: 12px;
                 font-size: 10px;
-                font-weight: 900;
+                font-weight: 800;
                 white-space: nowrap;
-                border: 3px solid white;
-                box-shadow: 0 3px 10px rgba(0,0,0,0.6);
-                letter-spacing: 0.8px;
+                border: 2.5px solid white;
+                box-shadow: 0 4px 12px rgba(255,0,0,0.5);
+                letter-spacing: 1px;
                 text-transform: uppercase;
               ">${corner.label}</div>
             </div>
           `,
-          iconSize: [70, 85],
-          iconAnchor: [35, 35],
+          iconSize: [75, 90],
+          iconAnchor: [37.5, 37.5],
         });
         
         const marker = window.L.marker([corner.lat, corner.lng], {
@@ -712,27 +872,27 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
         
         marker.bindTooltip(`
           <div style="
-            background: linear-gradient(135deg, #FF0000 0%, #CC0000 100%);
+            background: linear-gradient(135deg, #FF3333 0%, #E60000 100%);
             color: white;
-            padding: 8px 14px;
-            border-radius: 8px;
-            font-weight: 900;
-            font-size: 12px;
-            border: 3px solid white;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+            padding: 10px 16px;
+            border-radius: 10px;
+            font-weight: 800;
+            font-size: 13px;
+            border: 2px solid white;
+            box-shadow: 0 6px 16px rgba(255,0,0,0.4);
             text-align: center;
             letter-spacing: 0.5px;
           ">
-            <svg width="16" height="16" viewBox="0 0 24 24" style="vertical-align: middle; margin-right: 4px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" style="vertical-align: middle; margin-right: 6px;">
               <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" 
-                stroke="white" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
             ${corner.name}
           </div>
         `, {
           permanent: true,
           direction: 'top',
-          offset: [0, -25],
+          offset: [0, -28],
           className: 'corner-tooltip'
         });
         
@@ -755,8 +915,15 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
       
       if (typeof window !== 'undefined' && window.L && mapContainerRef.current && !googleMapRef.current) {
         try {
-          if (mapContainerRef.current.innerHTML) {
+          // Only clear if we're initializing for the first time
+          if (mapContainerRef.current.innerHTML && !googleMapRef.current) {
             mapContainerRef.current.innerHTML = '';
+          }
+          
+          // Double check map doesn't exist
+          if (googleMapRef.current) {
+            console.log('Map already exists, skipping initialization');
+            return;
           }
           
           const map = window.L.map(mapContainerRef.current, {
@@ -874,11 +1041,17 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
           ) : locationToUse ? (
             <div
               ref={mapContainerRef}
+              key="map-container"
               style={{
                 flex: 1,
                 width: '100%',
                 height: '100%',
                 backgroundColor: '#E5E5E5',
+                position: 'relative',
+                zIndex: 1,
+              }}
+              onError={(e) => {
+                console.error('Map container error:', e);
               }}
             />
           ) : (
@@ -953,8 +1126,11 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
                 <TouchableOpacity
                   style={[styles.mapControlButton, styles.applyButton]}
                   onPress={() => {
-                    console.log('✅ Applying grid');
+                    console.log('✅ Apply button clicked');
+                    console.log('📍 Plot corners:', plotCorners);
+                    console.log('🗺️ Map ref exists:', !!googleMapRef.current);
                     setCornerSelectionMode(false);
+                    console.log('🔄 Corner selection mode set to false');
                   }}
                   activeOpacity={0.6}
                 >
@@ -967,14 +1143,47 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
                 <TouchableOpacity
                   style={styles.mapControlButton}
                   onPress={() => {
+                    console.log('🗑️ Clearing grid - removing', gridLayersRef.current.length, 'layers');
+                    
+                    // Remove all tracked grid layers
                     gridLayersRef.current.forEach(l => {
                       try {
-                        googleMapRef.current.removeLayer(l);
-                      } catch (e) {}
+                        if (l && googleMapRef.current) {
+                          googleMapRef.current.removeLayer(l);
+                        }
+                      } catch (e) {
+                        console.log('⚠️ Error removing layer:', e);
+                      }
                     });
+                    
+                    // Also remove any orphaned layers by checking all map layers
+                    if (googleMapRef.current && window.L) {
+                      googleMapRef.current.eachLayer((layer) => {
+                        // Remove any polylines or polygons that look like grid lines
+                        if (layer instanceof window.L.Polyline || layer instanceof window.L.Polygon) {
+                          try {
+                            // Check if it's a grid-related layer (yellow/golden colors)
+                            const options = layer.options;
+                            if (options && (
+                              options.color === '#FFD700' || 
+                              options.color === '#F4C430' ||
+                              options.fillColor === '#FFA500' ||
+                              options.fillColor === 'rgba(255, 165, 0, 0.35)'
+                            )) {
+                              googleMapRef.current.removeLayer(layer);
+                              console.log('🗑️ Removed orphaned grid layer');
+                            }
+                          } catch (e) {
+                            // Ignore errors for layers that might not have options
+                          }
+                        }
+                      });
+                    }
+                    
                     gridLayersRef.current = [];
                     setPlotCorners([]);
                     setShowVastuGrid(false);
+                    console.log('✅ Grid cleared successfully');
                   }}
                   activeOpacity={0.6}
                 >
@@ -1022,14 +1231,35 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
           {cornerSelectionMode && showCornerBanner && (
             <View style={styles.cornerBanner}>
               <View style={styles.cornerIconContainer}>
-                <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-                  <rect x="3" y="3" width="22" height="22" rx="2" stroke="white" strokeWidth="2.5" fill="rgba(255,255,255,0.1)"/>
-                  <path d="M3 14h22M14 3v22" stroke="white" strokeWidth="1" strokeDasharray="2,2" opacity="0.5"/>
-                  <circle cx="3" cy="3" r="3" fill="white"/>
-                  <circle cx="25" cy="3" r="3" fill="white"/>
-                  <circle cx="25" cy="25" r="3" fill="white"/>
-                  <circle cx="3" cy="25" r="3" fill="white"/>
-                  <path d="M14 10l-2-2 2-2M14 18l-2 2 2 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" opacity="0.7"/>
+                <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                  <defs>
+                    <filter id="cornerGlow" x="-50%" y="-50%" width="200%" height="200%">
+                      <feGaussianBlur stdDeviation="1" result="coloredBlur"/>
+                      <feMerge>
+                        <feMergeNode in="coloredBlur"/>
+                        <feMergeNode in="SourceGraphic"/>
+                      </feMerge>
+                    </filter>
+                  </defs>
+                  
+                  <rect x="6" y="6" width="20" height="20" rx="2" stroke="white" strokeWidth="2" fill="rgba(255,255,255,0.15)" opacity="0.9"/>
+                  
+                  <circle cx="6" cy="6" r="3.5" fill="white" filter="url(#cornerGlow)">
+                    <animate attributeName="r" values="3.5;4.2;3.5" dur="2s" repeatCount="indefinite"/>
+                  </circle>
+                  <circle cx="26" cy="6" r="3.5" fill="white" filter="url(#cornerGlow)">
+                    <animate attributeName="r" values="3.5;4.2;3.5" dur="2s" begin="0.5s" repeatCount="indefinite"/>
+                  </circle>
+                  <circle cx="26" cy="26" r="3.5" fill="white" filter="url(#cornerGlow)">
+                    <animate attributeName="r" values="3.5;4.2;3.5" dur="2s" begin="1s" repeatCount="indefinite"/>
+                  </circle>
+                  <circle cx="6" cy="26" r="3.5" fill="white" filter="url(#cornerGlow)">
+                    <animate attributeName="r" values="3.5;4.2;3.5" dur="2s" begin="1.5s" repeatCount="indefinite"/>
+                  </circle>
+                  
+                  <path d="M10 16h12M16 10v12" stroke="white" strokeWidth="1.5" strokeDasharray="3,2" opacity="0.4"/>
+                  
+                  <path d="M16 12l-2-2 2-2M16 20l-2 2 2 2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.8"/>
                 </svg>
               </View>
               <Text style={styles.cornerBannerTitle}>Adjust Plot Corners - Drag 4 red dots</Text>
@@ -1050,11 +1280,30 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
           {showVastuGrid && showGridBanner && (
             <View style={styles.gridBanner}>
               <View style={styles.gridIconContainer}>
-                <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-                  <rect x="3" y="3" width="22" height="22" rx="2" fill="white" opacity="0.9"/>
-                  <path d="M3 10.33h22M3 17.67h22M10.33 3v22M17.67 3v22" stroke="#4169E1" strokeWidth="1.8"/>
-                  <rect x="10.33" y="10.33" width="7.34" height="7.34" fill="#FFA500" opacity="0.7"/>
-                  <text x="14" y="16" textAnchor="middle" fill="white" fontSize="8" fontWeight="bold">ॐ</text>
+                <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                  <defs>
+                    <linearGradient id="gridGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#FFFFFF" stopOpacity="1" />
+                      <stop offset="100%" stopColor="#E3F2FD" stopOpacity="1" />
+                    </linearGradient>
+                    <linearGradient id="brahmaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#FFD700" stopOpacity="1" />
+                      <stop offset="50%" stopColor="#FFA500" stopOpacity="1" />
+                      <stop offset="100%" stopColor="#FF8C00" stopOpacity="1" />
+                    </linearGradient>
+                  </defs>
+                  
+                  <rect x="4" y="4" width="24" height="24" rx="2" fill="url(#gridGrad)" stroke="white" strokeWidth="1.5"/>
+                  
+                  <path d="M4 12h24M4 20h24M12 4v24M20 4v24" stroke="#2196F3" strokeWidth="2" opacity="0.8"/>
+                  
+                  <rect x="12" y="12" width="8" height="8" fill="url(#brahmaGrad)" rx="1">
+                    <animate attributeName="opacity" values="0.9;1;0.9" dur="3s" repeatCount="indefinite"/>
+                  </rect>
+                  
+                  <circle cx="16" cy="16" r="2" fill="white" opacity="0.9">
+                    <animate attributeName="r" values="2;2.5;2" dur="2s" repeatCount="indefinite"/>
+                  </circle>
                 </svg>
               </View>
               <Text style={styles.gridBannerTitle}>Vastu Grid Active - 81 Padas • Brahmasthan shown</Text>
@@ -1276,27 +1525,30 @@ const styles = StyleSheet.create({
     top: getResponsiveSize(90),
     right: getResponsiveSize(15),
     flexDirection: 'column',
-    gap: getResponsiveSize(10),
+    gap: getResponsiveSize(12),
     zIndex: 1001,
   },
   mapControlButton: {
-    width: getResponsiveSize(44),
-    height: getResponsiveSize(44),
-    borderRadius: getResponsiveSize(22),
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    width: getResponsiveSize(48),
+    height: getResponsiveSize(48),
+    borderRadius: getResponsiveSize(24),
+    backgroundColor: 'rgba(255, 255, 255, 0.98)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#B8860B',
-    elevation: 4,
+    borderWidth: 0,
+    elevation: 6,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
   },
   mapControlButtonActive: {
-    borderColor: '#F4C430',
-    backgroundColor: '#FFE082',
+    backgroundColor: '#FFD54F',
+    elevation: 8,
+    shadowColor: '#F4C430',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
   },
   mapControlButtonText: {
     fontSize: getResponsiveFont(22),
@@ -1329,32 +1581,32 @@ const styles = StyleSheet.create({
   },
   bottomInfo: {
     position: 'absolute',
-    bottom: getResponsiveSize(80),
+    bottom: getResponsiveSize(85),
     left: getResponsiveSize(15),
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderRadius: getResponsiveSize(8),
-    borderWidth: 1,
-    borderColor: '#F4C430',
-    padding: getResponsiveSize(10),
-    elevation: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.98)',
+    borderRadius: getResponsiveSize(12),
+    borderWidth: 0,
+    padding: getResponsiveSize(12),
+    elevation: 6,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.2,
-    shadowRadius: 4,
+    shadowRadius: 6,
   },
   infoBox: {
     gap: getResponsiveSize(2),
   },
   infoLabel: {
     fontSize: getResponsiveFont(10),
-    color: '#8B7355',
-    fontWeight: '700',
-    marginBottom: getResponsiveSize(2),
+    color: '#F4C430',
+    fontWeight: '800',
+    marginBottom: getResponsiveSize(4),
+    letterSpacing: 0.5,
   },
   infoValue: {
     fontSize: getResponsiveFont(10),
-    color: '#2C2C2C',
-    fontWeight: '500',
+    color: '#424242',
+    fontWeight: '600',
   },
   bottomControls: {
     position: 'absolute',
@@ -1364,36 +1616,43 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: getResponsiveSize(12),
+    gap: getResponsiveSize(14),
     paddingHorizontal: getResponsiveSize(15),
     zIndex: 600,
   },
   bottomButton: {
-    width: getResponsiveSize(50),
-    height: getResponsiveSize(50),
-    borderRadius: getResponsiveSize(25),
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    width: getResponsiveSize(54),
+    height: getResponsiveSize(54),
+    borderRadius: getResponsiveSize(27),
+    backgroundColor: 'rgba(255, 255, 255, 0.98)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#B8860B',
-    elevation: 4,
+    borderWidth: 0,
+    elevation: 6,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
   },
   bottomButtonActive: {
-    borderColor: '#F4C430',
-    backgroundColor: '#FFE082',
+    backgroundColor: '#FFD54F',
+    elevation: 8,
+    shadowColor: '#F4C430',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
   },
   applyButton: {
-    backgroundColor: 'rgba(76, 175, 80, 0.98)',
-    borderColor: '#4CAF50',
-    borderWidth: 4,
-    width: getResponsiveSize(56),
-    height: getResponsiveSize(56),
-    borderRadius: getResponsiveSize(28),
+    backgroundColor: '#4CAF50',
+    borderWidth: 0,
+    width: getResponsiveSize(60),
+    height: getResponsiveSize(60),
+    borderRadius: getResponsiveSize(30),
+    elevation: 10,
+    shadowColor: '#4CAF50',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
   },
   applyButtonText: {
     fontSize: getResponsiveFont(32),
@@ -1405,37 +1664,36 @@ const styles = StyleSheet.create({
     top: getResponsiveSize(145),
     left: getResponsiveSize(15),
     right: getResponsiveSize(145),
-    background: 'linear-gradient(135deg, #FF4500 0%, #FF6347 100%)',
-    borderRadius: getResponsiveSize(12),
-    paddingVertical: getResponsiveSize(12),
-    paddingHorizontal: getResponsiveSize(14),
-    borderWidth: 3,
-    borderColor: 'rgba(255, 255, 255, 0.9)',
+    background: 'linear-gradient(135deg, #FF5722 0%, #FF7043 100%)',
+    borderRadius: getResponsiveSize(14),
+    paddingVertical: getResponsiveSize(14),
+    paddingHorizontal: getResponsiveSize(16),
+    borderWidth: 0,
     zIndex: 999,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: getResponsiveSize(10),
-    shadowColor: '#FF4500',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.6,
-    shadowRadius: 12,
+    gap: getResponsiveSize(12),
+    shadowColor: '#FF5722',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
     elevation: 15,
   },
   cornerIconContainer: {
-    width: getResponsiveSize(24),
-    height: getResponsiveSize(24),
+    width: getResponsiveSize(32),
+    height: getResponsiveSize(32),
     justifyContent: 'center',
     alignItems: 'center',
   },
   cornerBannerTitle: {
     fontSize: getResponsiveFont(14),
-    fontWeight: '900',
+    fontWeight: '700',
     color: '#FFFFFF',
     flex: 1,
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 3,
-    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+    letterSpacing: 0.3,
   },
   cornerBannerText: {
     fontSize: getResponsiveFont(11),
@@ -1443,21 +1701,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   cornerCloseButton: {
-    width: getResponsiveSize(32),
-    height: getResponsiveSize(32),
-    borderRadius: getResponsiveSize(16),
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    width: getResponsiveSize(30),
+    height: getResponsiveSize(30),
+    borderRadius: getResponsiveSize(15),
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.6)',
+    borderWidth: 0,
   },
   closeButtonText: {
     color: '#FFFFFF',
-    fontSize: getResponsiveFont(22),
-    fontWeight: '900',
-    lineHeight: getResponsiveFont(22),
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    fontSize: getResponsiveFont(20),
+    fontWeight: '700',
+    lineHeight: getResponsiveFont(20),
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },
@@ -1466,73 +1723,74 @@ const styles = StyleSheet.create({
     top: getResponsiveSize(145),
     left: getResponsiveSize(15),
     right: getResponsiveSize(145),
-    background: 'linear-gradient(135deg, #4169E1 0%, #1E90FF 100%)',
-    borderRadius: getResponsiveSize(12),
-    paddingVertical: getResponsiveSize(12),
-    paddingHorizontal: getResponsiveSize(14),
-    borderWidth: 3,
-    borderColor: 'rgba(255, 255, 255, 0.9)',
+    background: 'linear-gradient(135deg, #2196F3 0%, #42A5F5 100%)',
+    borderRadius: getResponsiveSize(14),
+    paddingVertical: getResponsiveSize(14),
+    paddingHorizontal: getResponsiveSize(16),
+    borderWidth: 0,
     zIndex: 999,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: getResponsiveSize(10),
-    shadowColor: '#4169E1',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.6,
-    shadowRadius: 12,
+    gap: getResponsiveSize(12),
+    shadowColor: '#2196F3',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
     elevation: 15,
   },
   gridIconContainer: {
-    width: getResponsiveSize(24),
-    height: getResponsiveSize(24),
+    width: getResponsiveSize(32),
+    height: getResponsiveSize(32),
     justifyContent: 'center',
     alignItems: 'center',
   },
   gridBannerTitle: {
     fontSize: getResponsiveFont(14),
-    fontWeight: '900',
+    fontWeight: '700',
     color: '#FFFFFF',
     flex: 1,
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 3,
-    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+    letterSpacing: 0.3,
   },
   gridCloseButton: {
-    width: getResponsiveSize(32),
-    height: getResponsiveSize(32),
-    borderRadius: getResponsiveSize(16),
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    width: getResponsiveSize(30),
+    height: getResponsiveSize(30),
+    borderRadius: getResponsiveSize(15),
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.6)',
+    borderWidth: 0,
   },
   layerDivider: {
-    height: 2,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    marginVertical: getResponsiveSize(8),
-    width: getResponsiveSize(44),
+    height: 1,
+    backgroundColor: 'rgba(244, 196, 48, 0.4)',
+    marginVertical: getResponsiveSize(10),
+    width: getResponsiveSize(48),
+    borderRadius: getResponsiveSize(0.5),
   },
   layerButton: {
-    width: getResponsiveSize(44),
-    height: getResponsiveSize(44),
-    borderRadius: getResponsiveSize(22),
-    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    width: getResponsiveSize(48),
+    height: getResponsiveSize(48),
+    borderRadius: getResponsiveSize(24),
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#999999',
+    borderWidth: 0,
     elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.2,
     shadowRadius: 4,
   },
   layerButtonActive: {
-    backgroundColor: 'rgba(244, 196, 48, 0.95)',
-    borderColor: '#F4C430',
-    borderWidth: 3,
+    backgroundColor: '#FFD54F',
+    elevation: 6,
+    shadowColor: '#F4C430',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
   },
   layerButtonText: {
     fontSize: getResponsiveFont(16),
