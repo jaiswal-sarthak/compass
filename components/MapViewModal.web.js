@@ -90,8 +90,22 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
   const [plotCorners, setPlotCorners] = useState([]);
   const [cornerSelectionMode, setCornerSelectionMode] = useState(false);
   const [showVastuGrid, setShowVastuGrid] = useState(false);
-  const [showCornerBanner, setShowCornerBanner] = useState(true);
-  const [showGridBanner, setShowGridBanner] = useState(true);
+  
+  // Check sessionStorage for guide visibility (only show once per session)
+  const getSessionBannerState = (key, defaultValue) => {
+    if (typeof window === 'undefined' || !window.sessionStorage) return defaultValue;
+    const stored = window.sessionStorage.getItem(key);
+    // If stored value is 'true', it means banner was already shown, so return false (don't show)
+    // If stored is null, banner hasn't been shown, so return true (show)
+    return stored === 'true' ? false : defaultValue;
+  };
+  
+  const [showCornerBanner, setShowCornerBanner] = useState(() => 
+    getSessionBannerState('mapViewCornerBannerShown', true)
+  );
+  const [showGridBanner, setShowGridBanner] = useState(() => 
+    getSessionBannerState('mapViewGridBannerShown', true)
+  );
   
   // 3 LAYER TOGGLES
   const [showOuterLayer, setShowOuterLayer] = useState(true);
@@ -102,6 +116,33 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
   const cornerSelectionModeRef = useRef(false);
   const [mapReady, setMapReady] = useState(false);
   const cornerMarkersRef = useRef([]);
+
+  // Add web-specific styles for gradient backgrounds and ensure banners are visible
+  useEffect(() => {
+    if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+      const styleId = 'mapViewBannerGradients';
+      if (!document.getElementById(styleId)) {
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.textContent = `
+          /* Ensure banners have proper gradients on web */
+          [data-testid="corner-banner"] {
+            background: linear-gradient(135deg, #FF5722 0%, #FF7043 100%) !important;
+            position: relative !important;
+            z-index: 999 !important;
+            overflow: visible !important;
+          }
+          [data-testid="grid-banner"] {
+            background: linear-gradient(135deg, #2196F3 0%, #42A5F5 100%) !important;
+            position: relative !important;
+            z-index: 999 !important;
+            overflow: visible !important;
+          }
+        `;
+        document.head.appendChild(style);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (visible) {
@@ -139,11 +180,33 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
   useEffect(() => {
     cornerSelectionModeRef.current = cornerSelectionMode;
     console.log('📌 Corner selection mode:', cornerSelectionMode);
-    // Reset banner visibility when mode changes
+    // Show banner only if it hasn't been shown this session
     if (cornerSelectionMode) {
-      setShowCornerBanner(true);
+      const hasBeenShown = typeof window !== 'undefined' && window.sessionStorage 
+        ? window.sessionStorage.getItem('mapViewCornerBannerShown') === 'true'
+        : false;
+      if (!hasBeenShown) {
+        setShowCornerBanner(true);
+      }
     }
   }, [cornerSelectionMode]);
+  
+  // Initialize banners on first visit this session
+  useEffect(() => {
+    if (visible && typeof window !== 'undefined' && window.sessionStorage) {
+      // Check if this is the first time entering this section this session
+      const cornerBannerShown = window.sessionStorage.getItem('mapViewCornerBannerShown') === 'true';
+      const gridBannerShown = window.sessionStorage.getItem('mapViewGridBannerShown') === 'true';
+      
+      // Only set to true if not already shown
+      if (!cornerBannerShown && cornerSelectionMode) {
+        setShowCornerBanner(true);
+      }
+      if (!gridBannerShown && showVastuGrid) {
+        setShowGridBanner(true);
+      }
+    }
+  }, [visible]);
 
   // Load Leaflet script dynamically
   useEffect(() => {
@@ -281,12 +344,17 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
       }).addTo(googleMapRef.current);
       gridLayersRef.current.push(outline);
       
-      // 2. Draw 3-LAYER GRID (divide by 3)
+      // 2. Draw FULL 9x9 GRID (81 cells total) - matching grid.svg layout
       const [BL, BR, TR, TL] = rectXY;
-      const divisions = [0, 1/3, 2/3, 1];
       
-      // Draw main 3x3 division lines with improved styling
-      divisions.forEach((t, idx) => {
+      // Draw all 9x9 grid lines (10 lines each direction for 9x9 grid)
+      for (let i = 0; i <= 9; i++) {
+        const t = i / 9;
+        
+        // Determine line weight and color based on position
+        const isMainBorder = i === 0 || i === 9;
+        const isLayerBorder = i === 3 || i === 6; // 1/3 and 2/3 divisions (3-layer boundaries)
+        
         // Vertical lines
         const bottomPoint = interpolate(BL, BR, t);
         const topPoint = interpolate(TL, TR, t);
@@ -294,12 +362,10 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
           const coord = xyToLatLng(center, p.x, p.y);
           return [coord.latitude, coord.longitude];
         });
-        const isMainBorder = idx === 0 || idx === 3;
-        const isLayerBorder = idx === 1 || idx === 2;
         const vLine = window.L.polyline(vertLatLngs, {
-          color: isMainBorder ? '#FFD700' : '#F4C430',
-          weight: isMainBorder ? 4 : (isLayerBorder ? 2.5 : 2),
-          opacity: isMainBorder ? 0.95 : 0.8,
+          color: isMainBorder ? '#FFD700' : (isLayerBorder ? '#F4C430' : '#F4C430'),
+          weight: isMainBorder ? 4 : (isLayerBorder ? 2.5 : 1.5),
+          opacity: isMainBorder ? 0.95 : (isLayerBorder ? 0.8 : 0.6),
           lineCap: 'round',
         }).addTo(googleMapRef.current);
         gridLayersRef.current.push(vLine);
@@ -312,33 +378,12 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
           return [coord.latitude, coord.longitude];
         });
         const hLine = window.L.polyline(horizLatLngs, {
-          color: isMainBorder ? '#FFD700' : '#F4C430',
-          weight: isMainBorder ? 4 : (isLayerBorder ? 2.5 : 2),
-          opacity: isMainBorder ? 0.95 : 0.8,
+          color: isMainBorder ? '#FFD700' : (isLayerBorder ? '#F4C430' : '#F4C430'),
+          weight: isMainBorder ? 4 : (isLayerBorder ? 2.5 : 1.5),
+          opacity: isMainBorder ? 0.95 : (isLayerBorder ? 0.8 : 0.6),
           lineCap: 'round',
         }).addTo(googleMapRef.current);
         gridLayersRef.current.push(hLine);
-      });
-      
-      // OPTIONAL: Add finer subdivisions for outer layer (9 cells per side)
-      if (showOuterLayer) {
-        // Subdivide outer strip into 9 cells
-        for (let i = 0; i <= 9; i++) {
-          const t = i / 9 / 3; // Within first third
-          
-          // Top strip subdivisions
-          const topBottom = interpolate(BL, BR, i/9);
-          const topTop = interpolate(interpolate(BL, TL, 1/3), interpolate(BR, TR, 1/3), i/9);
-          const subLine = window.L.polyline([topBottom, topTop].map(p => {
-            const coord = xyToLatLng(center, p.x, p.y);
-            return [coord.latitude, coord.longitude];
-          }), {
-            color: '#F4C430',
-            weight: 1,
-            opacity: 0.5,
-          }).addTo(googleMapRef.current);
-          gridLayersRef.current.push(subLine);
-        }
       }
       
       // 3. Highlight CENTER LAYER (Brahmasthan) - Middle third of middle third
@@ -573,19 +618,19 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
         });
       }
       
-      // MIDDLE LAYER (8 devtas)
+      // MIDDLE LAYER (8 devtas) - around center cell at row 4, col 4
       if (showMiddleLayer) {
         MIDDLE_LAYER.forEach((devta, i) => {
-          // Position around the center
+          // Position around the center (center is at row 4, col 4)
           const positions = [
-            {row: 2, col: 4}, // N
-            {row: 4, col: 6}, // E
-            {row: 6, col: 4}, // S
-            {row: 4, col: 2}, // W
-            {row: 2, col: 2}, // NW
-            {row: 2, col: 6}, // NE
-            {row: 6, col: 2}, // SW
-            {row: 6, col: 6}, // SE
+            {row: 3, col: 4}, // N (North)
+            {row: 4, col: 5}, // E (East)
+            {row: 5, col: 4}, // S (South)
+            {row: 4, col: 3}, // W (West)
+            {row: 3, col: 3}, // NW (North-West)
+            {row: 3, col: 5}, // NE (North-East)
+            {row: 5, col: 3}, // SW (South-West)
+            {row: 5, col: 5}, // SE (South-East)
           ];
           const pos = positions[i];
           const cellCenter = getCellCenterXY(rectXY, pos.row, pos.col);
@@ -603,6 +648,11 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
         };
         
         const size = layerSizes[layer];
+        
+        // Check if color is light blue or light green - for tooltip text only (not label)
+        const lightColors = ['#87CEEB', '#4169E1', '#0000CD', '#4682B4', '#90EE90', '#32CD32'];
+        const isLightColor = lightColors.some(color => devta.color.toLowerCase() === color.toLowerCase());
+        const tooltipTextColor = isLightColor ? '#000000' : '#FFFFFF';
         
         const icon = window.L.divIcon({
           className: `devta-label-${layer}`,
@@ -635,12 +685,12 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
         marker.bindTooltip(`
           <div style="
             background: linear-gradient(135deg, ${devta.color}F5, ${devta.color}DD);
-            color: white;
+            color: ${tooltipTextColor};
             padding: 12px 16px;
             border-radius: 12px;
             font-weight: bold;
             font-size: 13px;
-            border: 2px solid rgba(255, 255, 255, 0.9);
+            border: 2px solid #FFFFFF;
             box-shadow: 0 6px 18px rgba(0,0,0,0.5);
             text-align: center;
           ">
@@ -655,7 +705,13 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
       }
       
       setShowVastuGrid(true);
-      setShowGridBanner(true);
+      // Only show grid banner if it hasn't been shown this session
+      const gridBannerShown = typeof window !== 'undefined' && window.sessionStorage 
+        ? window.sessionStorage.getItem('mapViewGridBannerShown') === 'true'
+        : false;
+      if (!gridBannerShown) {
+        setShowGridBanner(true);
+      }
       console.log('✅ Vastu grid drawn with enhanced UI!');
     } catch (error) {
       console.error('❌ CRITICAL Grid error:', error);
@@ -776,11 +832,26 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
       const offset = 0.0008;
       
       const autoCorners = [
-        { lat: center.lat - offset, lng: center.lng - offset, label: 'BL', name: 'Bottom-Left' },
-        { lat: center.lat - offset, lng: center.lng + offset, label: 'BR', name: 'Bottom-Right' },
-        { lat: center.lat + offset, lng: center.lng + offset, label: 'TR', name: 'Top-Right' },
-        { lat: center.lat + offset, lng: center.lng - offset, label: 'TL', name: 'Top-Left' },
+        { lat: center.lat - offset, lng: center.lng - offset, label: 'BL', name: 'Bottom-Left', direction: 'bottom-left' },
+        { lat: center.lat - offset, lng: center.lng + offset, label: 'BR', name: 'Bottom-Right', direction: 'bottom-right' },
+        { lat: center.lat + offset, lng: center.lng + offset, label: 'TR', name: 'Top-Right', direction: 'top-right' },
+        { lat: center.lat + offset, lng: center.lng - offset, label: 'TL', name: 'Top-Left', direction: 'top-left' },
       ];
+      
+      // SVG arrow functions for each direction - clear black diagonal arrows with arrowheads
+      const getArrowSVG = (direction) => {
+        const arrows = {
+          // Top-Left: Arrow pointing from center to top-left corner
+          'top-left': '<path d="M10 10L1 1M1 1L1 4.5M1 1L4.5 1" stroke="#000000" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+          // Top-Right: Arrow pointing from center to top-right corner
+          'top-right': '<path d="M10 10L19 1M19 1L19 4.5M19 1L15.5 1" stroke="#000000" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+          // Bottom-Left: Arrow pointing from center to bottom-left corner
+          'bottom-left': '<path d="M10 10L1 19M1 19L1 15.5M1 19L4.5 19" stroke="#000000" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+          // Bottom-Right: Arrow pointing from center to bottom-right corner
+          'bottom-right': '<path d="M10 10L19 19M19 19L19 15.5M19 19L15.5 19" stroke="#000000" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>'
+        };
+        return `<svg width="20" height="20" viewBox="0 0 20 20" style="vertical-align: middle; margin-right: 4px; display: inline-block;">${arrows[direction]}</svg>`;
+      };
       
       console.log('🔴 PLACING RED DOTS:', autoCorners);
       
@@ -790,71 +861,38 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
         const icon = window.L.divIcon({
           className: `corner-marker-${i}`,
           html: `
-            <div style="position: relative; width: 75px; height: 90px; cursor: grab;">
-              <svg width="75" height="75" viewBox="0 0 75 75">
+            <div style="position: relative; width: 60px; height: 60px; cursor: grab; padding: 8px; display: flex; align-items: center; justify-content: center;">
+              <svg width="44" height="44" viewBox="0 0 44 44">
                 <defs>
                   <radialGradient id="grad${i}" cx="40%" cy="40%">
                     <stop offset="0%" stop-color="#FF6B6B" stop-opacity="1" />
                     <stop offset="50%" stop-color="#FF3333" stop-opacity="1" />
                     <stop offset="100%" stop-color="#E60000" stop-opacity="1" />
                   </radialGradient>
-                  <filter id="glow${i}" x="-50%" y="-50%" width="200%" height="200%">
-                    <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
+                  <filter id="lightGlow${i}" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
                     <feMerge>
                       <feMergeNode in="coloredBlur"/>
                       <feMergeNode in="SourceGraphic"/>
                     </feMerge>
                   </filter>
-                  <filter id="shadow${i}">
-                    <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.4"/>
-                  </filter>
                 </defs>
                 
-                <!-- Pulsing outer ring -->
-                <circle cx="37.5" cy="37.5" r="34" fill="none" stroke="#FF3333" stroke-width="2" opacity="0.5">
-                  <animate attributeName="r" from="30" to="36" dur="2.5s" repeatCount="indefinite"/>
-                  <animate attributeName="opacity" from="0.7" to="0" dur="2.5s" repeatCount="indefinite"/>
-                </circle>
+                <!-- Main circle with gradient and light white glow border -->
+                <circle cx="22" cy="22" r="20" fill="url(#grad${i})" 
+                  stroke="rgba(255,255,255,0.6)" 
+                  stroke-width="2" 
+                  filter="url(#lightGlow${i})"
+                  style="filter: drop-shadow(0 0 3px rgba(255,255,255,0.4));"/>
                 
-                <!-- Main circle with gradient -->
-                <circle cx="37.5" cy="37.5" r="30" fill="url(#grad${i})" stroke="white" stroke-width="4" filter="url(#glow${i})"/>
-                
-                <!-- Inner highlight circles -->
-                <circle cx="37.5" cy="37.5" r="25" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/>
-                <circle cx="37.5" cy="37.5" r="20" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
-                
-                <!-- Corner marker icon -->
-                <path d="M30 30h-7v7M45 30h7v7M45 45h7v-7M30 45h-7v-7" stroke="white" stroke-width="2.5" opacity="0.6" stroke-linecap="round"/>
-                
-                <!-- Number with enhanced shadow -->
-                <text x="37.5" y="43" text-anchor="middle" fill="white" 
-                  font-size="26" font-weight="900" font-family="Arial, sans-serif"
-                  style="paint-order: stroke; stroke: rgba(0,0,0,0.6); stroke-width: 4px;"
-                  filter="url(#shadow${i})">${i + 1}</text>
+                <!-- Number -->
+                <text x="22" y="28" text-anchor="middle" fill="white" 
+                  font-size="20" font-weight="900" font-family="Arial, sans-serif">${i + 1}</text>
               </svg>
-              
-              <!-- Enhanced label tag -->
-              <div style="
-                position: absolute;
-                bottom: 0;
-                left: 50%;
-                transform: translateX(-50%);
-                background: linear-gradient(135deg, #FF3333 0%, #E60000 100%);
-                color: white;
-                padding: 5px 12px;
-                border-radius: 12px;
-                font-size: 10px;
-                font-weight: 800;
-                white-space: nowrap;
-                border: 2.5px solid white;
-                box-shadow: 0 4px 12px rgba(255,0,0,0.5);
-                letter-spacing: 1px;
-                text-transform: uppercase;
-              ">${corner.label}</div>
             </div>
           `,
-          iconSize: [75, 90],
-          iconAnchor: [37.5, 37.5],
+          iconSize: [60, 60],
+          iconAnchor: [30, 30],
         });
         
         const marker = window.L.marker([corner.lat, corner.lng], {
@@ -874,20 +912,21 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
           <div style="
             background: linear-gradient(135deg, #FF3333 0%, #E60000 100%);
             color: white;
-            padding: 10px 16px;
-            border-radius: 10px;
+            padding: 6px 10px;
+            border-radius: 8px;
             font-weight: 800;
             font-size: 13px;
             border: 2px solid white;
-            box-shadow: 0 6px 16px rgba(255,0,0,0.4);
+            box-shadow: 0 4px 12px rgba(255,0,0,0.4);
             text-align: center;
             letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
           ">
-            <svg width="18" height="18" viewBox="0 0 24 24" style="vertical-align: middle; margin-right: 6px;">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" 
-                stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            ${corner.name}
+            ${getArrowSVG(corner.direction)}
+            <span>${corner.name}</span>
           </div>
         `, {
           permanent: true,
@@ -1115,8 +1154,8 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
                   }}
                   activeOpacity={0.6}
                 >
-                  <Text style={styles.mapControlButtonText}>
-                    {cornerSelectionMode ? '📍' : '⬜'}
+                  <Text style={[styles.mapControlButtonText, !cornerSelectionMode && styles.omSymbolText]}>
+                    {cornerSelectionMode ? '📍' : 'ॐ'}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -1229,94 +1268,106 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
           
           {/* CORNER SELECTION BANNER */}
           {cornerSelectionMode && showCornerBanner && (
-            <View style={styles.cornerBanner}>
-              <View style={styles.cornerIconContainer}>
-                <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-                  <defs>
-                    <filter id="cornerGlow" x="-50%" y="-50%" width="200%" height="200%">
-                      <feGaussianBlur stdDeviation="1" result="coloredBlur"/>
-                      <feMerge>
-                        <feMergeNode in="coloredBlur"/>
-                        <feMergeNode in="SourceGraphic"/>
-                      </feMerge>
-                    </filter>
-                  </defs>
-                  
-                  <rect x="6" y="6" width="20" height="20" rx="2" stroke="white" strokeWidth="2" fill="rgba(255,255,255,0.15)" opacity="0.9"/>
-                  
-                  <circle cx="6" cy="6" r="3.5" fill="white" filter="url(#cornerGlow)">
-                    <animate attributeName="r" values="3.5;4.2;3.5" dur="2s" repeatCount="indefinite"/>
-                  </circle>
-                  <circle cx="26" cy="6" r="3.5" fill="white" filter="url(#cornerGlow)">
-                    <animate attributeName="r" values="3.5;4.2;3.5" dur="2s" begin="0.5s" repeatCount="indefinite"/>
-                  </circle>
-                  <circle cx="26" cy="26" r="3.5" fill="white" filter="url(#cornerGlow)">
-                    <animate attributeName="r" values="3.5;4.2;3.5" dur="2s" begin="1s" repeatCount="indefinite"/>
-                  </circle>
-                  <circle cx="6" cy="26" r="3.5" fill="white" filter="url(#cornerGlow)">
-                    <animate attributeName="r" values="3.5;4.2;3.5" dur="2s" begin="1.5s" repeatCount="indefinite"/>
-                  </circle>
-                  
-                  <path d="M10 16h12M16 10v12" stroke="white" strokeWidth="1.5" strokeDasharray="3,2" opacity="0.4"/>
-                  
-                  <path d="M16 12l-2-2 2-2M16 20l-2 2 2 2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.8"/>
-                </svg>
+            <View style={styles.bannerContainer}>
+              <View style={styles.cornerBanner} data-testid="corner-banner">
+                <View style={styles.cornerIconContainer}>
+                  <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                    <defs>
+                      <filter id="cornerGlow" x="-50%" y="-50%" width="200%" height="200%">
+                        <feGaussianBlur stdDeviation="1" result="coloredBlur"/>
+                        <feMerge>
+                          <feMergeNode in="coloredBlur"/>
+                          <feMergeNode in="SourceGraphic"/>
+                        </feMerge>
+                      </filter>
+                    </defs>
+                    
+                    <rect x="6" y="6" width="20" height="20" rx="2" stroke="white" strokeWidth="2" fill="rgba(255,255,255,0.15)" opacity="0.9"/>
+                    
+                    <circle cx="6" cy="6" r="3.5" fill="white" filter="url(#cornerGlow)">
+                      <animate attributeName="r" values="3.5;4.2;3.5" dur="2s" repeatCount="indefinite"/>
+                    </circle>
+                    <circle cx="26" cy="6" r="3.5" fill="white" filter="url(#cornerGlow)">
+                      <animate attributeName="r" values="3.5;4.2;3.5" dur="2s" begin="0.5s" repeatCount="indefinite"/>
+                    </circle>
+                    <circle cx="26" cy="26" r="3.5" fill="white" filter="url(#cornerGlow)">
+                      <animate attributeName="r" values="3.5;4.2;3.5" dur="2s" begin="1s" repeatCount="indefinite"/>
+                    </circle>
+                    <circle cx="6" cy="26" r="3.5" fill="white" filter="url(#cornerGlow)">
+                      <animate attributeName="r" values="3.5;4.2;3.5" dur="2s" begin="1.5s" repeatCount="indefinite"/>
+                    </circle>
+                    
+                    <path d="M10 16h12M16 10v12" stroke="white" strokeWidth="1.5" strokeDasharray="3,2" opacity="0.4"/>
+                    
+                    <path d="M16 12l-2-2 2-2M16 20l-2 2 2 2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.8"/>
+                  </svg>
+                </View>
+                <Text style={styles.cornerBannerTitle}>Adjust Plot Corners - Drag 4 red dots</Text>
+                <TouchableOpacity
+                  style={styles.cornerCloseButton}
+                  onPress={() => {
+                    console.log('❌ Hiding instruction banner only');
+                    setShowCornerBanner(false);
+                    // Mark as shown in sessionStorage so it doesn't show again this session
+                    if (typeof window !== 'undefined' && window.sessionStorage) {
+                      window.sessionStorage.setItem('mapViewCornerBannerShown', 'true');
+                    }
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.closeButtonText}>✕</Text>
+                </TouchableOpacity>
               </View>
-              <Text style={styles.cornerBannerTitle}>Adjust Plot Corners - Drag 4 red dots</Text>
-              <TouchableOpacity
-                style={styles.cornerCloseButton}
-                onPress={() => {
-                  console.log('❌ Hiding instruction banner only');
-                  setShowCornerBanner(false);
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.closeButtonText}>✕</Text>
-              </TouchableOpacity>
             </View>
           )}
           
           {/* GRID ACTIVE BANNER */}
           {showVastuGrid && showGridBanner && (
-            <View style={styles.gridBanner}>
-              <View style={styles.gridIconContainer}>
-                <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-                  <defs>
-                    <linearGradient id="gridGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#FFFFFF" stopOpacity="1" />
-                      <stop offset="100%" stopColor="#E3F2FD" stopOpacity="1" />
-                    </linearGradient>
-                    <linearGradient id="brahmaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#FFD700" stopOpacity="1" />
-                      <stop offset="50%" stopColor="#FFA500" stopOpacity="1" />
-                      <stop offset="100%" stopColor="#FF8C00" stopOpacity="1" />
-                    </linearGradient>
-                  </defs>
-                  
-                  <rect x="4" y="4" width="24" height="24" rx="2" fill="url(#gridGrad)" stroke="white" strokeWidth="1.5"/>
-                  
-                  <path d="M4 12h24M4 20h24M12 4v24M20 4v24" stroke="#2196F3" strokeWidth="2" opacity="0.8"/>
-                  
-                  <rect x="12" y="12" width="8" height="8" fill="url(#brahmaGrad)" rx="1">
-                    <animate attributeName="opacity" values="0.9;1;0.9" dur="3s" repeatCount="indefinite"/>
-                  </rect>
-                  
-                  <circle cx="16" cy="16" r="2" fill="white" opacity="0.9">
-                    <animate attributeName="r" values="2;2.5;2" dur="2s" repeatCount="indefinite"/>
-                  </circle>
-                </svg>
+            <View style={styles.bannerContainer}>
+              <View style={styles.gridBanner} data-testid="grid-banner">
+                <View style={styles.gridIconContainer}>
+                  <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                    <defs>
+                      <linearGradient id="gridGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#FFFFFF" stopOpacity="1" />
+                        <stop offset="100%" stopColor="#E3F2FD" stopOpacity="1" />
+                      </linearGradient>
+                      <linearGradient id="brahmaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#FFD700" stopOpacity="1" />
+                        <stop offset="50%" stopColor="#FFA500" stopOpacity="1" />
+                        <stop offset="100%" stopColor="#FF8C00" stopOpacity="1" />
+                      </linearGradient>
+                    </defs>
+                    
+                    <rect x="4" y="4" width="24" height="24" rx="2" fill="url(#gridGrad)" stroke="white" strokeWidth="1.5"/>
+                    
+                    <path d="M4 12h24M4 20h24M12 4v24M20 4v24" stroke="#2196F3" strokeWidth="2" opacity="0.8"/>
+                    
+                    <rect x="12" y="12" width="8" height="8" fill="url(#brahmaGrad)" rx="1">
+                      <animate attributeName="opacity" values="0.9;1;0.9" dur="3s" repeatCount="indefinite"/>
+                    </rect>
+                    
+                    <circle cx="16" cy="16" r="2" fill="white" opacity="0.9">
+                      <animate attributeName="r" values="2;2.5;2" dur="2s" repeatCount="indefinite"/>
+                    </circle>
+                  </svg>
+                </View>
+                <Text style={styles.gridBannerTitle}>Vastu Grid Active - 81 Padas • Brahmasthan shown</Text>
+                <TouchableOpacity
+                  style={styles.gridCloseButton}
+                  onPress={() => {
+                    console.log('✓ Dismissing grid info banner only');
+                    setShowGridBanner(false);
+                    // Mark as shown in sessionStorage so it doesn't show again this session
+                    if (typeof window !== 'undefined' && window.sessionStorage) {
+                      window.sessionStorage.setItem('mapViewGridBannerShown', 'true');
+                    }
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.closeButtonText}>✕</Text>
+                </TouchableOpacity>
               </View>
-              <Text style={styles.gridBannerTitle}>Vastu Grid Active - 81 Padas • Brahmasthan shown</Text>
-              <TouchableOpacity
-                style={styles.gridCloseButton}
-                onPress={() => {
-                  console.log('✓ Dismissing grid info banner only');
-                  setShowGridBanner(false);
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.closeButtonText}>✕</Text>
-              </TouchableOpacity>
             </View>
           )}
 
@@ -1553,6 +1604,11 @@ const styles = StyleSheet.create({
   mapControlButtonText: {
     fontSize: getResponsiveFont(22),
   },
+  omSymbolText: {
+    color: '#F4C430',
+    fontSize: getResponsiveFont(24),
+    fontWeight: '900',
+  },
   locationSearchOverlay: {
     position: 'absolute',
     top: 0,
@@ -1659,25 +1715,30 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '900',
   },
-  cornerBanner: {
+  bannerContainer: {
     position: 'absolute',
     top: getResponsiveSize(145),
     left: getResponsiveSize(15),
     right: getResponsiveSize(145),
-    background: 'linear-gradient(135deg, #FF5722 0%, #FF7043 100%)',
-    borderRadius: getResponsiveSize(14),
-    paddingVertical: getResponsiveSize(14),
-    paddingHorizontal: getResponsiveSize(16),
-    borderWidth: 0,
     zIndex: 999,
+    pointerEvents: 'box-none',
+  },
+  cornerBanner: {
+    backgroundColor: '#FF5722',
+    borderRadius: getResponsiveSize(14),
+    paddingVertical: getResponsiveSize(8),
+    paddingHorizontal: getResponsiveSize(10),
+    borderWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: getResponsiveSize(12),
+    gap: getResponsiveSize(10),
     shadowColor: '#FF5722',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.4,
     shadowRadius: 16,
     elevation: 15,
+    overflow: 'visible',
+    minHeight: getResponsiveSize(50),
   },
   cornerIconContainer: {
     width: getResponsiveSize(32),
@@ -1719,24 +1780,21 @@ const styles = StyleSheet.create({
     textShadowRadius: 2,
   },
   gridBanner: {
-    position: 'absolute',
-    top: getResponsiveSize(145),
-    left: getResponsiveSize(15),
-    right: getResponsiveSize(145),
-    background: 'linear-gradient(135deg, #2196F3 0%, #42A5F5 100%)',
+    backgroundColor: '#2196F3',
     borderRadius: getResponsiveSize(14),
-    paddingVertical: getResponsiveSize(14),
-    paddingHorizontal: getResponsiveSize(16),
+    paddingVertical: getResponsiveSize(8),
+    paddingHorizontal: getResponsiveSize(10),
     borderWidth: 0,
-    zIndex: 999,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: getResponsiveSize(12),
+    gap: getResponsiveSize(10),
     shadowColor: '#2196F3',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.4,
     shadowRadius: 16,
     elevation: 15,
+    overflow: 'visible',
+    minHeight: getResponsiveSize(50),
   },
   gridIconContainer: {
     width: getResponsiveSize(32),

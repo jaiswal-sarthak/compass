@@ -119,7 +119,8 @@ export default function CompassView({
   onClearImage, 
   onHeadingChange, 
   onImageSizeChange, 
-  initialRotation 
+  initialRotation,
+  hideCalibration = false
 }) {
   const [heading, setHeading] = useState(0);
   const [imageContainerSize, setImageContainerSize] = useState(COMPASS_SIZE);
@@ -523,8 +524,8 @@ export default function CompassView({
         <View style={styles.headingDot} />
       </View>
       
-      {/* Calibration banner */}
-      {showCalibration && (
+      {/* Calibration banner - hidden in capture mode */}
+      {showCalibration && !hideCalibration && (
         <View style={styles.calibrationBanner}>
           <View style={styles.calibrationContent}>
             <Text style={styles.calibrationIcon}>∞</Text>
@@ -599,13 +600,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFD700',
   },
   headingDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: '#FFD700',
-    marginTop: -5,
+    marginTop: -3,
     alignSelf: 'center',
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: '#FFFFFF',
   },
   clearImageButton: {

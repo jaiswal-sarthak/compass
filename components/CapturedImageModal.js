@@ -23,6 +23,7 @@ import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import { captureRef } from 'react-native-view-shot';
 import { Svg, Path, Line, Circle, Rect, Text as SvgText } from 'react-native-svg';
+import { CompassToggleIcon } from './svgs';
 import CompassView from './CompassView';
 
 // Get dimensions safely
@@ -63,8 +64,8 @@ export default function CapturedImageModal({
   const scale = useSharedValue(0);
   const imageContainerRef = useRef(null);
   
-  // Grid & Compass Controls
-  const [showCompass, setShowCompass] = useState(true);
+  // Grid & Compass Controls - Don't auto-show compass
+  const [showCompass, setShowCompass] = useState(false);
   const [showVastuGrid, setShowVastuGrid] = useState(false);
   const [showOuterLayer, setShowOuterLayer] = useState(true);
   const [showMiddleLayer, setShowMiddleLayer] = useState(true);
@@ -329,17 +330,19 @@ export default function CapturedImageModal({
                 </Svg>
               )}
               
-              {/* Compass Overlay */}
+              {/* Compass Overlay - Smaller size for captured image */}
               {showCompass && (
                 <View style={styles.compassWrapper}>
-                  <CompassView 
-                    mode={mode}
-                    compassType={compassType}
-                    capturedImage={null}
-                    onClearImage={() => {}}
-                    onHeadingChange={() => {}}
-                    initialRotation={0}
-                  />
+                  <View style={{ transform: [{ scale: 0.65 }] }}>
+                    <CompassView 
+                      mode={mode}
+                      compassType={compassType}
+                      capturedImage={null}
+                      onClearImage={() => {}}
+                      onHeadingChange={() => {}}
+                      initialRotation={0}
+                    />
+                  </View>
                 </View>
               )}
             </View>
@@ -352,7 +355,7 @@ export default function CapturedImageModal({
                 onPress={() => setShowCompass(!showCompass)}
                 activeOpacity={0.7}
               >
-                <Text style={styles.controlButtonText}>🧭</Text>
+                <CompassToggleIcon size={getResponsiveSize(20)} color={showCompass ? "#F4C430" : "#FFFFFF"} />
               </TouchableOpacity>
               
               {/* Toggle Grid */}
@@ -361,30 +364,16 @@ export default function CapturedImageModal({
                 onPress={() => setShowVastuGrid(!showVastuGrid)}
                 activeOpacity={0.7}
               >
-                <Text style={styles.controlButtonText}>⬜</Text>
+                <Text style={[styles.controlButtonText, !showVastuGrid && styles.omSymbolText]}>
+                  {showVastuGrid ? '⬜' : 'ॐ'}
+                </Text>
               </TouchableOpacity>
               
               {showVastuGrid && (
                 <>
                   <View style={styles.controlDivider} />
                   
-                  {/* Layer Toggles */}
-                  <TouchableOpacity
-                    style={[styles.layerControl, showOuterLayer && styles.layerControlActive]}
-                    onPress={() => setShowOuterLayer(!showOuterLayer)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.layerControlText}>O</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity
-                    style={[styles.layerControl, showMiddleLayer && styles.layerControlActive]}
-                    onPress={() => setShowMiddleLayer(!showMiddleLayer)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.layerControlText}>M</Text>
-                  </TouchableOpacity>
-                  
+                  {/* Center Layer Toggle Only */}
                   <TouchableOpacity
                     style={[styles.layerControl, showCenterLayer && styles.layerControlActive]}
                     onPress={() => setShowCenterLayer(!showCenterLayer)}
@@ -676,6 +665,11 @@ const styles = StyleSheet.create({
   },
   controlButtonText: {
     fontSize: getResponsiveSize(22),
+  },
+  omSymbolText: {
+    color: '#F4C430',
+    fontSize: getResponsiveSize(24),
+    fontWeight: '900',
   },
   controlDivider: {
     height: 2,

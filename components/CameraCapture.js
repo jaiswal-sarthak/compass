@@ -20,6 +20,7 @@ import Animated, {
 import { LinearGradient } from 'expo-linear-gradient';
 import CompassView from './CompassView';
 import Svg, { Line, Circle, Rect } from 'react-native-svg';
+import { CompassToggleIcon } from './svgs';
 
 const { width, height } = Dimensions.get('window');
 
@@ -30,8 +31,8 @@ export default function CameraCapture({ onCapture, onClose, visible, mode = 'nor
   const scale = useSharedValue(0);
   const hasAnimated = useRef(false);
   
-  // Compass & Grid Controls
-  const [showCompass, setShowCompass] = useState(true);
+  // Compass & Grid Controls - Don't auto-show compass
+  const [showCompass, setShowCompass] = useState(false);
   const [showVastuGrid, setShowVastuGrid] = useState(false);
   const [heading, setHeading] = useState(0);
   
@@ -202,6 +203,7 @@ export default function CameraCapture({ onCapture, onClose, visible, mode = 'nor
                     capturedImage={null}
                     onClearImage={() => {}}
                     onHeadingChange={setHeading}
+                    hideCalibration={true}
                   />
                 </View>
               )}
@@ -481,7 +483,12 @@ export default function CameraCapture({ onCapture, onClose, visible, mode = 'nor
                   style={[styles.sideButton, showCompass && styles.sideButtonActive]}
                   onPress={() => setShowCompass(!showCompass)}
                 >
-                  <Text style={styles.sideButtonText}>🧭</Text>
+                  <View style={[
+                    styles.compassIconContainer,
+                    showCompass && styles.compassIconContainerActive
+                  ]}>
+                    <CompassToggleIcon size={28} color={showCompass ? "#2C2C2C" : "#F4C430"} />
+                  </View>
                 </TouchableOpacity>
                 
                 {/* Toggle Vastu Grid */}
@@ -489,28 +496,21 @@ export default function CameraCapture({ onCapture, onClose, visible, mode = 'nor
                   style={[styles.sideButton, showVastuGrid && styles.sideButtonActive]}
                   onPress={() => setShowVastuGrid(!showVastuGrid)}
                 >
-                  <Text style={styles.sideButtonText}>⬜</Text>
+                  <View style={[
+                    styles.omIconContainer,
+                    showVastuGrid && styles.omIconContainerActive
+                  ]}>
+                    <Text style={[styles.sideButtonText, !showVastuGrid && styles.omSymbolText]}>
+                      {showVastuGrid ? '⬜' : 'ॐ'}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
                 
                 {showVastuGrid && (
                   <>
                     <View style={styles.sideDivider} />
                     
-                    {/* Layer Toggles */}
-                    <TouchableOpacity
-                      style={[styles.layerButton, showOuterLayer && styles.layerButtonActive]}
-                      onPress={() => setShowOuterLayer(!showOuterLayer)}
-                    >
-                      <Text style={styles.layerButtonText}>O</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity
-                      style={[styles.layerButton, showMiddleLayer && styles.layerButtonActive]}
-                      onPress={() => setShowMiddleLayer(!showMiddleLayer)}
-                    >
-                      <Text style={styles.layerButtonText}>M</Text>
-                    </TouchableOpacity>
-                    
+                    {/* Center Layer Toggle Only */}
                     <TouchableOpacity
                       style={[styles.layerButton, showCenterLayer && styles.layerButtonActive]}
                       onPress={() => setShowCenterLayer(!showCenterLayer)}
@@ -712,6 +712,53 @@ const styles = StyleSheet.create({
   },
   sideButtonText: {
     fontSize: 24,
+  },
+  compassIconContainer: {
+    width: 42,
+    height: 42,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 4,
+    borderColor: 'rgba(244, 195, 48, 0.78)',
+    shadowColor: '#F4C430',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  compassIconContainerActive: {
+    backgroundColor: 'rgba(244, 196, 48, 0.2)',
+    borderColor: '#F4C430',
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
+  },
+  omIconContainer: {
+    width: 42,
+    height: 42,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 4,
+    borderColor: 'rgba(248, 205, 77, 0.69)',
+    shadowColor: '#F4C430',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  omIconContainerActive: {
+    backgroundColor: 'rgba(244, 196, 48, 0.2)',
+    borderColor: '#F4C430',
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
+  },
+  omSymbolText: {
+    color: '#F4C430',
+    fontSize: 24,
+    fontWeight: '900',
   },
   sideDivider: {
     height: 2,
