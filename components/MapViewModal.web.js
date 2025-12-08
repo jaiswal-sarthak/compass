@@ -14,6 +14,7 @@ import {
 import CompassView from './CompassView';
 import CompassTopBar from './CompassTopBar';
 import LocationSearch from './LocationSearch';
+import { useI18n, translateDevta as translateDevtaName } from '../utils/i18n';
 import { 
   DownloadIcon, 
   RecenterIcon, 
@@ -22,17 +23,7 @@ import {
   CompassToggleIcon, 
   MapLayerIcon 
 } from './svgs';
-import {
-  latLngToXY,
-  xyToLatLng,
-  averageCenter,
-  sortCornersAsRect,
-  createGridLinesXY,
-  getCellCenterXY,
-  getCellCornersXY,
-  create3LayerGridXY,
-  interpolate,
-} from '../utils/mapUtils';
+// Removed mapUtils imports - using simple inline calculations instead
 import {
   VASTU_GRID_9X9,
   getBrahmasthanCells,
@@ -71,6 +62,7 @@ const getResponsiveFont = (size) => {
 };
 
 export default function MapViewModal({ visible, onClose, mode, compassType, selectedLocation }) {
+  const { t, language, translateDevta } = useI18n();
   const [currentLocation, setCurrentLocation] = useState(null);
   const [heading, setHeading] = useState(0);
   
@@ -314,6 +306,9 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
       
       console.log('✅ All checks passed, drawing grid...');
       
+      // Get current language for devta translation
+      const currentLang = language || 'en';
+      
       // Clear previous grid (except corner markers)
       gridLayersRef.current.forEach(layer => {
         if (googleMapRef.current && layer && !cornerMarkersRef.current.includes(layer)) {
@@ -326,119 +321,129 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
       });
       gridLayersRef.current = gridLayersRef.current.filter(l => cornerMarkersRef.current.includes(l));
       
-      const center = averageCenter(plotCorners);
-      const xyCorners = plotCorners.map(p => latLngToXY(center, p));
-      const rectXY = sortCornersAsRect(xyCorners);
-      console.log('📐 Grid calculations done');
-      const { verticalLines, horizontalLines } = createGridLinesXY(rectXY);
+      // Calculate center as average of corners
+      const center = {
+        latitude: plotCorners.reduce((sum, p) => sum + p.latitude, 0) / 4,
+        longitude: plotCorners.reduce((sum, p) => sum + p.longitude, 0) / 4,
+      };
       
-      // 1. Draw plot outline with enhanced styling
+      // 1. Draw plot outline
       const plotOutline = plotCorners.map(p => [p.latitude, p.longitude]);
       const outline = window.L.polygon([...plotOutline, plotOutline[0]], {
-        color: '#FFD700',
-        weight: 3,
+        color: '#F4C430',
         fillColor: 'transparent',
+        weight: 3,
         opacity: 0.9,
-        dashArray: '12, 6',
-        lineCap: 'round',
       }).addTo(googleMapRef.current);
       gridLayersRef.current.push(outline);
       
-      // 2. Draw FULL 9x9 GRID (81 cells total) - matching grid.svg layout
-      const [BL, BR, TR, TL] = rectXY;
-      
-      // Draw all 9x9 grid lines (10 lines each direction for 9x9 grid)
+      // 2. Draw 9x9 grid lines (simple interpolation between corners)
       for (let i = 0; i <= 9; i++) {
         const t = i / 9;
         
-        // Determine line weight and color based on position
-        const isMainBorder = i === 0 || i === 9;
-        const isLayerBorder = i === 3 || i === 6; // 1/3 and 2/3 divisions (3-layer boundaries)
-        
         // Vertical lines
-        const bottomPoint = interpolate(BL, BR, t);
-        const topPoint = interpolate(TL, TR, t);
-        const vertLatLngs = [bottomPoint, topPoint].map(p => {
-          const coord = xyToLatLng(center, p.x, p.y);
-          return [coord.latitude, coord.longitude];
-        });
-        const vLine = window.L.polyline(vertLatLngs, {
-          color: isMainBorder ? '#FFD700' : (isLayerBorder ? '#F4C430' : '#F4C430'),
-          weight: isMainBorder ? 4 : (isLayerBorder ? 2.5 : 1.5),
-          opacity: isMainBorder ? 0.95 : (isLayerBorder ? 0.8 : 0.6),
-          lineCap: 'round',
+        const bottomLat = plotCorners[0].latitude + (plotCorners[1].latitude - plotCorners[0].latitude) * t;
+        const bottomLng = plotCorners[0].longitude + (plotCorners[1].longitude - plotCorners[0].longitude) * t;
+        const topLat = plotCorners[3].latitude + (plotCorners[2].latitude - plotCorners[3].latitude) * t;
+        const topLng = plotCorners[3].longitude + (plotCorners[2].longitude - plotCorners[3].longitude) * t;
+        
+        const vLine = window.L.polyline([[bottomLat, bottomLng], [topLat, topLng]], {
+          color: '#F4C430',
+          weight: 1,
+          opacity: 0.6,
         }).addTo(googleMapRef.current);
         gridLayersRef.current.push(vLine);
         
         // Horizontal lines
-        const leftPoint = interpolate(BL, TL, t);
-        const rightPoint = interpolate(BR, TR, t);
-        const horizLatLngs = [leftPoint, rightPoint].map(p => {
-          const coord = xyToLatLng(center, p.x, p.y);
-          return [coord.latitude, coord.longitude];
-        });
-        const hLine = window.L.polyline(horizLatLngs, {
-          color: isMainBorder ? '#FFD700' : (isLayerBorder ? '#F4C430' : '#F4C430'),
-          weight: isMainBorder ? 4 : (isLayerBorder ? 2.5 : 1.5),
-          opacity: isMainBorder ? 0.95 : (isLayerBorder ? 0.8 : 0.6),
-          lineCap: 'round',
+        const leftLat = plotCorners[0].latitude + (plotCorners[3].latitude - plotCorners[0].latitude) * t;
+        const leftLng = plotCorners[0].longitude + (plotCorners[3].longitude - plotCorners[0].longitude) * t;
+        const rightLat = plotCorners[1].latitude + (plotCorners[2].latitude - plotCorners[1].latitude) * t;
+        const rightLng = plotCorners[1].longitude + (plotCorners[2].longitude - plotCorners[1].longitude) * t;
+        
+        const hLine = window.L.polyline([[leftLat, leftLng], [rightLat, rightLng]], {
+          color: '#F4C430',
+          weight: 1,
+          opacity: 0.6,
         }).addTo(googleMapRef.current);
         gridLayersRef.current.push(hLine);
       }
       
-      // 3. Highlight CENTER LAYER (Brahmasthan) - Middle third of middle third
+      // 3. Highlight Brahmasthan (center 9 cells)
       if (showCenterLayer) {
-        // Calculate center 1/3 of the plot
-        const centerBL = interpolate(interpolate(BL, BR, 1/3), interpolate(BL, TL, 1/3), 0);
-        const centerBR = interpolate(interpolate(BL, BR, 2/3), interpolate(BL, TL, 1/3), 0);
-        const centerTR = interpolate(interpolate(BL, BR, 2/3), interpolate(BL, TL, 2/3), 0);
-        const centerTL = interpolate(interpolate(BL, BR, 1/3), interpolate(BL, TL, 2/3), 0);
-        
-        const centerCorners = [centerBL, centerBR, centerTR, centerTL];
-        const centerLatLngs = centerCorners.map(p => {
-          const coord = xyToLatLng(center, p.x, p.y);
-          return [coord.latitude, coord.longitude];
-        });
-        
-        // Draw Brahmasthan rectangle with improved styling
-        const brahmasthanPoly = window.L.polygon(centerLatLngs, {
-          color: '#FF8C00',
-          fillColor: 'rgba(255, 165, 0, 0.35)',
-          fillOpacity: 1,
-          weight: 3,
-        }).addTo(googleMapRef.current);
-        gridLayersRef.current.push(brahmasthanPoly);
-        
         const brahmasthanCells = getBrahmasthanCells();
         
-        // First, draw all Brahmasthan cells with orange fill
+        // Draw all Brahmasthan cells with orange fill
         brahmasthanCells.forEach(({ row, col }) => {
-          const corners = getCellCornersXY(rectXY, row, col);
-          const latLngs = corners.map(p => {
-            const coord = xyToLatLng(center, p.x, p.y);
-            return [coord.latitude, coord.longitude];
-          });
-          const polygon = window.L.polygon(latLngs, {
-            color: '#FF8C00',
-            fillColor: 'rgba(255, 165, 0, 0.35)',
-            fillOpacity: 1,
-            weight: 1.5,
+          // Calculate cell corners using simple interpolation
+          const rowStart = row / 9;
+          const rowEnd = (row + 1) / 9;
+          const colStart = col / 9;
+          const colEnd = (col + 1) / 9;
+          
+          // Calculate 4 corners of the cell
+          const blLat = plotCorners[0].latitude + (plotCorners[1].latitude - plotCorners[0].latitude) * colStart + (plotCorners[3].latitude - plotCorners[0].latitude) * rowStart;
+          const blLng = plotCorners[0].longitude + (plotCorners[1].longitude - plotCorners[0].longitude) * colStart + (plotCorners[3].longitude - plotCorners[0].longitude) * rowStart;
+          
+          const brLat = plotCorners[0].latitude + (plotCorners[1].latitude - plotCorners[0].latitude) * colEnd + (plotCorners[3].latitude - plotCorners[0].latitude) * rowStart;
+          const brLng = plotCorners[0].longitude + (plotCorners[1].longitude - plotCorners[0].longitude) * colEnd + (plotCorners[3].longitude - plotCorners[0].longitude) * rowStart;
+          
+          const trLat = plotCorners[0].latitude + (plotCorners[1].latitude - plotCorners[0].latitude) * colEnd + (plotCorners[3].latitude - plotCorners[0].latitude) * rowEnd;
+          const trLng = plotCorners[0].longitude + (plotCorners[1].longitude - plotCorners[0].longitude) * colEnd + (plotCorners[3].longitude - plotCorners[0].longitude) * rowEnd;
+          
+          const tlLat = plotCorners[0].latitude + (plotCorners[1].latitude - plotCorners[0].latitude) * colStart + (plotCorners[3].latitude - plotCorners[0].latitude) * rowEnd;
+          const tlLng = plotCorners[0].longitude + (plotCorners[1].longitude - plotCorners[0].longitude) * colStart + (plotCorners[3].longitude - plotCorners[0].longitude) * rowEnd;
+          
+          const polygon = window.L.polygon([
+            [blLat, blLng],
+            [brLat, brLng],
+            [trLat, trLng],
+            [tlLat, tlLng],
+          ], {
+            color: '#FFA500',
+            fillColor: '#FFA500',
+            fillOpacity: 0.3,
+            weight: 2,
           }).addTo(googleMapRef.current);
           gridLayersRef.current.push(polygon);
         });
         
-        // Add sacred geometry SVG icon in center of Brahmasthan
-        const brahmasthanCenter = getCellCenterXY(rectXY, 4, 4);
-        const centerCoord = xyToLatLng(center, brahmasthanCenter.x, brahmasthanCenter.y);
+        // Add sacred geometry SVG icon in center of Brahmasthan (center cell: row 4, col 4)
+        const centerRow = 4.5 / 9;
+        const centerCol = 4.5 / 9;
+        const centerCoord = {
+          lat: plotCorners[0].latitude + (plotCorners[1].latitude - plotCorners[0].latitude) * centerCol + (plotCorners[3].latitude - plotCorners[0].latitude) * centerRow,
+          lng: plotCorners[0].longitude + (plotCorners[1].longitude - plotCorners[0].longitude) * centerCol + (plotCorners[3].longitude - plotCorners[0].longitude) * centerRow,
+        };
         
-        // Calculate cell dimensions dynamically for responsive icon sizing
-        const cellCorners = getCellCornersXY(rectXY, 4, 4);
+        // Calculate cell dimensions for icon sizing (center cell corners)
+        const cellRowStart = 4 / 9;
+        const cellRowEnd = 5 / 9;
+        const cellColStart = 4 / 9;
+        const cellColEnd = 5 / 9;
         
-        // Convert cell corners to lat/lng for pixel calculation
-        const cellCornersLatLng = cellCorners.map(p => {
-          const coord = xyToLatLng(center, p.x, p.y);
-          return [coord.latitude, coord.longitude];
-        });
+        const cellBL = {
+          lat: plotCorners[0].latitude + (plotCorners[1].latitude - plotCorners[0].latitude) * cellColStart + (plotCorners[3].latitude - plotCorners[0].latitude) * cellRowStart,
+          lng: plotCorners[0].longitude + (plotCorners[1].longitude - plotCorners[0].longitude) * cellColStart + (plotCorners[3].longitude - plotCorners[0].longitude) * cellRowStart,
+        };
+        const cellBR = {
+          lat: plotCorners[0].latitude + (plotCorners[1].latitude - plotCorners[0].latitude) * cellColEnd + (plotCorners[3].latitude - plotCorners[0].latitude) * cellRowStart,
+          lng: plotCorners[0].longitude + (plotCorners[1].longitude - plotCorners[0].longitude) * cellColEnd + (plotCorners[3].longitude - plotCorners[0].longitude) * cellRowStart,
+        };
+        const cellTR = {
+          lat: plotCorners[0].latitude + (plotCorners[1].latitude - plotCorners[0].latitude) * cellColEnd + (plotCorners[3].latitude - plotCorners[0].latitude) * cellRowEnd,
+          lng: plotCorners[0].longitude + (plotCorners[1].longitude - plotCorners[0].longitude) * cellColEnd + (plotCorners[3].longitude - plotCorners[0].longitude) * cellRowEnd,
+        };
+        const cellTL = {
+          lat: plotCorners[0].latitude + (plotCorners[1].latitude - plotCorners[0].latitude) * cellColStart + (plotCorners[3].latitude - plotCorners[0].latitude) * cellRowEnd,
+          lng: plotCorners[0].longitude + (plotCorners[1].longitude - plotCorners[0].longitude) * cellColStart + (plotCorners[3].longitude - plotCorners[0].longitude) * cellRowEnd,
+        };
+        
+        const cellCornersLatLng = [
+          [cellBL.lat, cellBL.lng],
+          [cellBR.lat, cellBR.lng],
+          [cellTR.lat, cellTR.lng],
+          [cellTL.lat, cellTL.lng],
+        ];
         
         // Get pixel coordinates using Leaflet's projection
         const cellBLPixel = googleMapRef.current.latLngToContainerPoint(cellCornersLatLng[0]);
@@ -555,13 +560,14 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
                   border-radius: 10px;
                   font-weight: bold;
                   font-size: ${tooltipFontSize};
+                  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
                   box-shadow: 0 4px 12px rgba(255,140,0,0.5);
                   text-align: center;
                   border: none;
                   max-width: 180px;
                 ">
-                  <div style="font-size: ${tooltipTitleSize}; margin-bottom: 4px; font-weight: 900; letter-spacing: 0.5px;">✦ BRAHMASTHAN ✦</div>
-                  <div style="font-size: ${tooltipSubSize}; opacity: 0.95; font-weight: 600;">Sacred Center • Keep Open & Light</div>
+                  <div style="font-size: ${tooltipTitleSize}; margin-bottom: 4px; font-weight: 900; letter-spacing: 0.5px; font-family: 'DM Sans', sans-serif;">✦ BRAHMASTHAN ✦</div>
+                  <div style="font-size: ${tooltipSubSize}; opacity: 0.95; font-weight: 600; font-family: 'DM Sans', sans-serif;">Sacred Center • Keep Open & Light</div>
                 </div>
               `, { 
                 permanent: true, 
@@ -582,65 +588,65 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
         }
       }
       
-      // 4. Draw 45 DEVTA LABELS (3-Layer System)
-      const all45Devtas = getAll45Devtas();
-      
-      // OUTER LAYER (Perimeter - 28 devtas)
-      if (showOuterLayer) {
-        let outerIndex = 0;
-        
-        // Top row (9 devtas)
-        OUTER_LAYER.north.forEach((devta, i) => {
-          const cellCenter = getCellCenterXY(rectXY, 0, i);
-          const coord = xyToLatLng(center, cellCenter.x, cellCenter.y);
-          createDevtaMarker(devta, coord, 'outer');
-        });
-        
-        // Right column (7 devtas)
-        OUTER_LAYER.east.forEach((devta, i) => {
-          const cellCenter = getCellCenterXY(rectXY, i + 1, 8);
-          const coord = xyToLatLng(center, cellCenter.x, cellCenter.y);
-          createDevtaMarker(devta, coord, 'outer');
-        });
-        
-        // Bottom row (9 devtas)
-        OUTER_LAYER.south.forEach((devta, i) => {
-          const cellCenter = getCellCenterXY(rectXY, 8, 8 - i);
-          const coord = xyToLatLng(center, cellCenter.x, cellCenter.y);
-          createDevtaMarker(devta, coord, 'outer');
-        });
-        
-        // Left column (7 devtas)
-        OUTER_LAYER.west.forEach((devta, i) => {
-          const cellCenter = getCellCenterXY(rectXY, 7 - i, 0);
-          const coord = xyToLatLng(center, cellCenter.x, cellCenter.y);
-          createDevtaMarker(devta, coord, 'outer');
-        });
-      }
-      
-      // MIDDLE LAYER (8 devtas) - around center cell at row 4, col 4
-      if (showMiddleLayer) {
-        MIDDLE_LAYER.forEach((devta, i) => {
-          // Position around the center (center is at row 4, col 4)
-          const positions = [
-            {row: 3, col: 4}, // N (North)
-            {row: 4, col: 5}, // E (East)
-            {row: 5, col: 4}, // S (South)
-            {row: 4, col: 3}, // W (West)
-            {row: 3, col: 3}, // NW (North-West)
-            {row: 3, col: 5}, // NE (North-East)
-            {row: 5, col: 3}, // SW (South-West)
-            {row: 5, col: 5}, // SE (South-East)
-          ];
-          const pos = positions[i];
-          const cellCenter = getCellCenterXY(rectXY, pos.row, pos.col);
-          const coord = xyToLatLng(center, cellCenter.x, cellCenter.y);
-          createDevtaMarker(devta, coord, 'middle');
-        });
+      // 4. Draw devta labels (always show if any layer is visible)
+      if (showOuterLayer || showMiddleLayer || showCenterLayer) {
+        const currentLang = language || 'en';
+        for (let row = 0; row < 9; row++) {
+          for (let col = 0; col < 9; col++) {
+            const devtaInfo = VASTU_GRID_9X9[row][col];
+            const translatedDevtaName = translateDevtaName(devtaInfo.devta, currentLang);
+            
+            // Calculate cell center (simple interpolation)
+            const rowCenter = (row + 0.5) / 9;
+            const colCenter = (col + 0.5) / 9;
+            
+            const cellLat = plotCorners[0].latitude + 
+              (plotCorners[1].latitude - plotCorners[0].latitude) * colCenter +
+              (plotCorners[3].latitude - plotCorners[0].latitude) * rowCenter;
+            const cellLng = plotCorners[0].longitude + 
+              (plotCorners[1].longitude - plotCorners[0].longitude) * colCenter +
+              (plotCorners[3].longitude - plotCorners[0].longitude) * rowCenter;
+            
+            const devtaIcon = window.L.divIcon({
+              className: 'devta-label',
+              html: `<div style="
+                background: ${devtaInfo.color}DD;
+                color: white;
+                padding: 2px 6px;
+                border-radius: 4px;
+                font-size: 9px;
+                font-weight: bold;
+                font-family: 'DM Sans', sans-serif;
+                white-space: nowrap;
+                border: 1px solid white;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+                text-align: center;
+              ">${translatedDevtaName}<br/><span style="font-size: 7px; font-family: 'DM Sans', sans-serif;">${devtaInfo.zone}</span></div>`,
+              iconSize: [null, null],
+              iconAnchor: [0, 0]
+            });
+            
+            const marker = window.L.marker([cellLat, cellLng], {
+              icon: devtaIcon
+            }).addTo(googleMapRef.current);
+            
+            marker.bindTooltip(`
+              <div style="text-align: center; font-family: 'DM Sans', sans-serif;">
+                <strong style="font-family: 'DM Sans', sans-serif;">${translatedDevtaName}</strong><br/>
+                Zone: ${devtaInfo.zone}<br/>
+                Energy: ${devtaInfo.energy}
+              </div>
+            `, { direction: 'top' });
+            
+            gridLayersRef.current.push(marker);
+          }
+        }
       }
       
       // Helper function to create devta marker with improved styling
       function createDevtaMarker(devta, coord, layer) {
+        // Translate devta name based on current language
+        const translatedDevtaName = translateDevtaName(devta.devta, currentLang);
         const layerSizes = {
           outer: { fontSize: 8, padding: '4px 7px', borderWidth: 1.5, borderRadius: '8px' },
           middle: { fontSize: 10, padding: '5px 9px', borderWidth: 2, borderRadius: '10px' },
@@ -663,6 +669,7 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
             border-radius: ${size.borderRadius};
             font-size: ${size.fontSize}px;
             font-weight: ${layer === 'center' ? '900' : '700'};
+            font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             white-space: nowrap;
             border: ${size.borderWidth}px solid rgba(255, 255, 255, 0.85);
             box-shadow: 0 ${layer === 'center' ? '4' : '2'}px ${layer === 'center' ? '12' : '8'}px rgba(0,0,0,0.5);
@@ -671,8 +678,8 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
             line-height: 1.3;
             letter-spacing: 0.3px;
           ">
-            <div style="font-weight: 900;">${devta.devta}</div>
-            <div style="font-size: ${size.fontSize - 1.5}px; opacity: 0.85; margin-top: 1px;">${devta.zone}</div>
+            <div style="font-weight: 900; font-family: 'DM Sans', sans-serif;">${translatedDevtaName}</div>
+            <div style="font-size: ${size.fontSize - 1.5}px; opacity: 0.85; margin-top: 1px; font-family: 'DM Sans', sans-serif;">${devta.zone}</div>
           </div>`,
           iconSize: [null, null],
           iconAnchor: [0, 0]
@@ -690,14 +697,15 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
             border-radius: 12px;
             font-weight: bold;
             font-size: 13px;
+            font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             border: 2px solid #FFFFFF;
             box-shadow: 0 6px 18px rgba(0,0,0,0.5);
             text-align: center;
           ">
-            <div style="font-size: 16px; margin-bottom: 6px; font-weight: 900; letter-spacing: 0.5px;">${devta.devta}</div>
-            <div style="font-size: 11px; opacity: 0.95; margin: 4px 0;">Zone: ${devta.zone}</div>
-            <div style="font-size: 10px; opacity: 0.9; margin: 3px 0;">Energy: ${devta.energy}</div>
-            <div style="font-size: 9px; margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.3); opacity: 0.85; text-transform: uppercase;">${layer} Layer</div>
+            <div style="font-size: 16px; margin-bottom: 6px; font-weight: 900; letter-spacing: 0.5px; font-family: 'DM Sans', sans-serif;">${translatedDevtaName}</div>
+            <div style="font-size: 11px; opacity: 0.95; margin: 4px 0; font-family: 'DM Sans', sans-serif;">Zone: ${devta.zone}</div>
+            <div style="font-size: 10px; opacity: 0.9; margin: 3px 0; font-family: 'DM Sans', sans-serif;">Energy: ${devta.energy}</div>
+            <div style="font-size: 9px; margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.3); opacity: 0.85; text-transform: uppercase; font-family: 'DM Sans', sans-serif;">${layer} Layer</div>
           </div>
         `, { direction: 'top', offset: [0, -8], className: 'devta-tooltip' });
         
@@ -810,7 +818,7 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
     } else {
       console.log('⏸️ Not drawing grid - conditions not met');
     }
-  }, [plotCorners, showOuterLayer, showMiddleLayer, showCenterLayer, cornerSelectionMode]);
+  }, [plotCorners, showOuterLayer, showMiddleLayer, showCenterLayer, cornerSelectionMode, language]);
 
   // AUTO-PLACE DRAGGABLE CORNERS
   useEffect(() => {
@@ -916,6 +924,7 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
             border-radius: 8px;
             font-weight: 800;
             font-size: 13px;
+            font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             border: 2px solid white;
             box-shadow: 0 4px 12px rgba(255,0,0,0.4);
             text-align: center;
@@ -926,7 +935,7 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
             gap: 4px;
           ">
             ${getArrowSVG(corner.direction)}
-            <span>${corner.name}</span>
+            <span style="font-family: 'DM Sans', sans-serif;">${corner.name}</span>
           </div>
         `, {
           permanent: true,
@@ -1006,7 +1015,7 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
             icon: goldIcon
           }).addTo(map);
           
-          marker.bindPopup('Current Location').openPopup();
+          marker.bindPopup(t('info.currentLocation')).openPopup();
 
           googleMapRef.current = map;
           setMapReady(true);
@@ -1075,7 +1084,7 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
           {loading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color="#F4C430" />
-              <Text style={styles.loadingText}>Loading Map...</Text>
+              <Text style={styles.loadingText}>{t('map.loading')}</Text>
             </View>
           ) : locationToUse ? (
             <div
@@ -1095,7 +1104,7 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
             />
           ) : (
             <View style={styles.errorContainer}>
-              <Text style={styles.errorText}>Unable to load map</Text>
+              <Text style={styles.errorText}>{t('map.error')}</Text>
             </View>
           )}
 
@@ -1302,7 +1311,10 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
                     <path d="M16 12l-2-2 2-2M16 20l-2 2 2 2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.8"/>
                   </svg>
                 </View>
-                <Text style={styles.cornerBannerTitle}>Adjust Plot Corners - Drag 4 red dots</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cornerBannerTitle}>{t('map.cornerSelection.title')}</Text>
+                  <Text style={styles.cornerBannerSubtitle}>{t('map.cornerSelection.subtitle')}</Text>
+                </View>
                 <TouchableOpacity
                   style={styles.cornerCloseButton}
                   onPress={() => {
@@ -1352,7 +1364,10 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
                     </circle>
                   </svg>
                 </View>
-                <Text style={styles.gridBannerTitle}>Vastu Grid Active - 81 Padas • Brahmasthan shown</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.gridBannerTitle}>{t('map.gridActive.title')}</Text>
+                  <Text style={styles.gridBannerSubtitle}>{t('map.gridActive.subtitle')}</Text>
+                </View>
                 <TouchableOpacity
                   style={styles.gridCloseButton}
                   onPress={() => {
@@ -1392,12 +1407,12 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
           {locationToUse && (
             <View style={styles.bottomInfo}>
               <View style={styles.infoBox}>
-                <Text style={styles.infoLabel}>Geo-Coordinate:</Text>
+                <Text style={styles.infoLabel}>{t('map.geoCoordinate')}</Text>
                 <Text style={styles.infoValue}>
-                  Latitude: {locationToUse.latitude.toFixed(7)}
+                  {t('map.latitude')}: {locationToUse.latitude.toFixed(7)}
                 </Text>
                 <Text style={styles.infoValue}>
-                  Longitude: {locationToUse.longitude.toFixed(7)}
+                  {t('map.longitude')}: {locationToUse.longitude.toFixed(7)}
                 </Text>
               </View>
             </View>
@@ -1536,6 +1551,7 @@ const styles = StyleSheet.create({
     fontSize: getResponsiveFont(16),
     color: '#8B7355',
     fontWeight: '600',
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   errorContainer: {
     flex: 1,
@@ -1547,6 +1563,7 @@ const styles = StyleSheet.create({
     fontSize: getResponsiveFont(16),
     color: '#8B7355',
     fontWeight: '600',
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   compassOverlay: {
     position: 'absolute',
@@ -1586,7 +1603,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.98)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 0,
+    borderWidth: 2,
+    borderColor: 'rgba(244, 196, 48, 0.3)',
     elevation: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
@@ -1595,6 +1613,8 @@ const styles = StyleSheet.create({
   },
   mapControlButtonActive: {
     backgroundColor: '#FFD54F',
+    borderColor: '#F4C430',
+    borderWidth: 3,
     elevation: 8,
     shadowColor: '#F4C430',
     shadowOffset: { width: 0, height: 4 },
@@ -1603,11 +1623,13 @@ const styles = StyleSheet.create({
   },
   mapControlButtonText: {
     fontSize: getResponsiveFont(22),
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   omSymbolText: {
     color: '#F4C430',
     fontSize: getResponsiveFont(24),
     fontWeight: '900',
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   locationSearchOverlay: {
     position: 'absolute',
@@ -1641,12 +1663,13 @@ const styles = StyleSheet.create({
     left: getResponsiveSize(15),
     backgroundColor: 'rgba(255, 255, 255, 0.98)',
     borderRadius: getResponsiveSize(12),
-    borderWidth: 0,
+    borderWidth: 2,
+    borderColor: '#F4C430',
     padding: getResponsiveSize(12),
     elevation: 6,
-    shadowColor: '#000',
+    shadowColor: '#F4C430',
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.3,
     shadowRadius: 6,
   },
   infoBox: {
@@ -1658,11 +1681,13 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginBottom: getResponsiveSize(4),
     letterSpacing: 0.5,
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   infoValue: {
     fontSize: getResponsiveFont(10),
     color: '#424242',
     fontWeight: '600',
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   bottomControls: {
     position: 'absolute',
@@ -1683,7 +1708,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.98)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 0,
+    borderWidth: 2,
+    borderColor: 'rgba(244, 196, 48, 0.3)',
     elevation: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
@@ -1692,6 +1718,8 @@ const styles = StyleSheet.create({
   },
   bottomButtonActive: {
     backgroundColor: '#FFD54F',
+    borderColor: '#F4C430',
+    borderWidth: 3,
     elevation: 8,
     shadowColor: '#F4C430',
     shadowOffset: { width: 0, height: 4 },
@@ -1700,7 +1728,8 @@ const styles = StyleSheet.create({
   },
   applyButton: {
     backgroundColor: '#4CAF50',
-    borderWidth: 0,
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
     width: getResponsiveSize(60),
     height: getResponsiveSize(60),
     borderRadius: getResponsiveSize(30),
@@ -1714,6 +1743,7 @@ const styles = StyleSheet.create({
     fontSize: getResponsiveFont(32),
     color: '#FFFFFF',
     fontWeight: '900',
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   bannerContainer: {
     position: 'absolute',
@@ -1726,8 +1756,8 @@ const styles = StyleSheet.create({
   cornerBanner: {
     backgroundColor: '#FF5722',
     borderRadius: getResponsiveSize(14),
-    paddingVertical: getResponsiveSize(8),
-    paddingHorizontal: getResponsiveSize(10),
+    paddingVertical: getResponsiveSize(10),
+    paddingHorizontal: getResponsiveSize(12),
     borderWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
@@ -1739,6 +1769,8 @@ const styles = StyleSheet.create({
     elevation: 15,
     overflow: 'visible',
     minHeight: getResponsiveSize(50),
+    borderLeftWidth: 4,
+    borderLeftColor: '#FFFFFF',
   },
   cornerIconContainer: {
     width: getResponsiveSize(32),
@@ -1755,11 +1787,20 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
     letterSpacing: 0.3,
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   cornerBannerText: {
     fontSize: getResponsiveFont(11),
     color: 'rgba(255, 255, 255, 0.95)',
     fontWeight: '600',
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
+  },
+  cornerBannerSubtitle: {
+    fontSize: getResponsiveFont(11),
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontWeight: '500',
+    marginTop: getResponsiveSize(2),
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   cornerCloseButton: {
     width: getResponsiveSize(30),
@@ -1778,12 +1819,13 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   gridBanner: {
     backgroundColor: '#2196F3',
     borderRadius: getResponsiveSize(14),
-    paddingVertical: getResponsiveSize(8),
-    paddingHorizontal: getResponsiveSize(10),
+    paddingVertical: getResponsiveSize(10),
+    paddingHorizontal: getResponsiveSize(12),
     borderWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
@@ -1795,6 +1837,8 @@ const styles = StyleSheet.create({
     elevation: 15,
     overflow: 'visible',
     minHeight: getResponsiveSize(50),
+    borderLeftWidth: 4,
+    borderLeftColor: '#FFFFFF',
   },
   gridIconContainer: {
     width: getResponsiveSize(32),
@@ -1811,6 +1855,7 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
     letterSpacing: 0.3,
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   gridCloseButton: {
     width: getResponsiveSize(30),
@@ -1820,6 +1865,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 0,
+  },
+  gridBannerSubtitle: {
+    fontSize: getResponsiveFont(11),
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontWeight: '500',
+    marginTop: getResponsiveSize(2),
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   layerDivider: {
     height: 1,
@@ -1835,7 +1887,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.85)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 0,
+    borderWidth: 2,
+    borderColor: 'rgba(244, 196, 48, 0.3)',
     elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -1844,6 +1897,8 @@ const styles = StyleSheet.create({
   },
   layerButtonActive: {
     backgroundColor: '#FFD54F',
+    borderColor: '#F4C430',
+    borderWidth: 3,
     elevation: 6,
     shadowColor: '#F4C430',
     shadowOffset: { width: 0, height: 3 },
@@ -1854,6 +1909,7 @@ const styles = StyleSheet.create({
     fontSize: getResponsiveFont(16),
     fontWeight: '900',
     color: '#2C2C2C',
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
 });
 

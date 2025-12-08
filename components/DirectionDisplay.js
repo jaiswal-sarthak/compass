@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Dimensions, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useI18n } from '../utils/i18n';
 
 // Get dimensions safely
 const getDimensions = () => {
@@ -64,6 +65,7 @@ const getCardinalDirection = (degree) => {
 };
 
 export default function DirectionDisplay({ heading }) {
+  const { t } = useI18n();
   const direction = getDirectionName(heading);
   const cardinalDirection = getCardinalDirection(heading);
   const degree = Math.round(heading);
@@ -72,7 +74,7 @@ export default function DirectionDisplay({ heading }) {
     <View style={styles.container}>
       <View style={styles.directionBox}>
         {/* Title */}
-        <Text style={styles.title}>DIRECTION</Text>
+        <Text style={styles.title}>{t('direction.title')}</Text>
         
         {/* Main Directional Information */}
         <View style={styles.mainInfo}>
@@ -110,12 +112,13 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   title: {
-    fontSize: getResponsiveFont(9),
+    fontSize: getResponsiveFont(10),
     color: '#666666',
-    fontWeight: '600',
-    letterSpacing: 0.8,
+    fontWeight: '900',
+    letterSpacing: 1.2,
     textTransform: 'uppercase',
-    marginBottom: getResponsiveSize(8),
+    marginBottom: getResponsiveSize(10),
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   mainInfo: {
     flexDirection: 'row',
@@ -124,10 +127,12 @@ const styles = StyleSheet.create({
     marginBottom: getResponsiveSize(4),
   },
   directionText: {
-    fontSize: getResponsiveFont(28),
-    fontWeight: '700',
+    fontSize: getResponsiveFont(30),
+    fontWeight: '900',
     color: '#F4C430',
-    letterSpacing: 1,
+    letterSpacing: 1.2,
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
+    textShadow: '0px 2px 4px rgba(244, 196, 48, 0.3)',
   },
   divider: {
     width: 2,
@@ -144,9 +149,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   secondaryDirection: {
-    fontSize: getResponsiveFont(11),
+    fontSize: getResponsiveFont(12),
     color: '#666666',
-    fontWeight: '600',
-    letterSpacing: 0.5,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
 });

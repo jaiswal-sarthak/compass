@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform } from 'react-native';
 import LocationIcon from './icons/LocationIcon';
 import CameraIcon from './icons/CameraIcon';
+import { useI18n } from '../utils/i18n';
 
 // Get dimensions safely
 const getDimensions = () => {
@@ -53,6 +54,7 @@ const getCardinalDirection = (degree) => {
 };
 
 export default function CompassActionButtons({ onMapPress, onCameraPress, heading }) {
+  const { t } = useI18n();
   const degree = Math.round(heading);
 
   return (
@@ -65,12 +67,12 @@ export default function CompassActionButtons({ onMapPress, onCameraPress, headin
         <View style={styles.buttonCircle}>
           <LocationIcon size={getResponsiveSize(20)} color="#FFFFFF" />
         </View>
-        <Text style={styles.buttonLabel}>Google map</Text>
+        <Text style={styles.buttonLabel}>{t('button.googleMap')}</Text>
       </TouchableOpacity>
 
       <View style={styles.degreeContainer}>
         <View style={styles.degreeBox}>
-          <Text style={styles.degreeTitle}>DIRECTION</Text>
+          <Text style={styles.degreeTitle}>{t('direction.title')}</Text>
           <View style={styles.degreeMainInfo}>
             <Text style={styles.degreeDirection}>{getCardinalDirection(degree)}</Text>
             <View style={styles.degreeDivider} />
@@ -88,7 +90,7 @@ export default function CompassActionButtons({ onMapPress, onCameraPress, headin
         <View style={styles.buttonCircle}>
           <CameraIcon size={getResponsiveSize(20)} color="#FFFFFF" />
         </View>
-        <Text style={styles.buttonLabel}>Rear Camera</Text>
+        <Text style={styles.buttonLabel}>{t('button.rearCamera')}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -122,10 +124,12 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   buttonLabel: {
-    fontSize: getResponsiveFont(10),
+    fontSize: getResponsiveFont(11),
     color: '#8B7355',
-    fontWeight: '600',
-    marginTop: getResponsiveSize(2),
+    fontWeight: '700',
+    marginTop: getResponsiveSize(3),
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
+    letterSpacing: 0.3,
   },
   degreeContainer: {
     alignItems: 'center',
@@ -146,12 +150,13 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   degreeTitle: {
-    fontSize: getResponsiveFont(8),
+    fontSize: getResponsiveFont(9),
     color: '#666666',
-    fontWeight: '600',
-    letterSpacing: 0.8,
+    fontWeight: '900',
+    letterSpacing: 1.2,
     textTransform: 'uppercase',
-    marginBottom: getResponsiveSize(4),
+    marginBottom: getResponsiveSize(5),
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   degreeMainInfo: {
     flexDirection: 'row',

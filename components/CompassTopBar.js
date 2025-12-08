@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform } from '
 import { LinearGradient } from 'expo-linear-gradient';
 import SearchIcon from './icons/SearchIcon';
 import CompassIcon from './icons/CompassIcon';
+import LanguageToggle from './LanguageToggle';
+import { useI18n } from '../utils/i18n';
 
 // Get dimensions safely
 const getDimensions = () => {
@@ -42,6 +44,8 @@ const getResponsiveFont = (size) => {
 };
 
 export default function CompassTopBar({ onMenuPress, onSearchPress, onBackPress }) {
+  const { t } = useI18n();
+
   return (
     <LinearGradient
       colors={['#F4C430', '#FFD700', '#F4C430']}
@@ -56,7 +60,7 @@ export default function CompassTopBar({ onMenuPress, onSearchPress, onBackPress 
           activeOpacity={0.7}
         >
           <View style={styles.backButtonCircle}>
-            <Text style={styles.backButtonText}>←</Text>
+            <Text style={styles.backButtonText}>{t('common.back')}</Text>
           </View>
         </TouchableOpacity>
 
@@ -67,10 +71,12 @@ export default function CompassTopBar({ onMenuPress, onSearchPress, onBackPress 
         >
           <View style={styles.searchContent}>
             <SearchIcon size={getResponsiveSize(16)} color="#666666" />
-            <Text style={styles.searchText}>Search Location</Text>
+            <Text style={styles.searchText}>{t('header.search')}</Text>
           </View>
         </TouchableOpacity>
 
+        <View style={styles.rightButtons}>
+          <LanguageToggle />
         <TouchableOpacity
           style={styles.menuButton}
           onPress={onMenuPress}
@@ -82,6 +88,7 @@ export default function CompassTopBar({ onMenuPress, onSearchPress, onBackPress 
             <View style={styles.hamburgerLine} />
           </View>
         </TouchableOpacity>
+        </View>
       </View>
     </LinearGradient>
   );
@@ -102,6 +109,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  rightButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: getResponsiveSize(8),
   },
   menuButton: {
     width: getResponsiveSize(40),
@@ -151,6 +163,7 @@ const styles = StyleSheet.create({
     fontSize: getResponsiveFont(13),
     color: '#999999',
     flex: 1,
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   backButton: {
     justifyContent: 'center',

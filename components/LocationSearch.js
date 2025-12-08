@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import SearchIcon from './icons/SearchIcon';
 import LocationIcon from './icons/LocationIcon';
+import { useI18n } from '../utils/i18n';
 
 // Get dimensions safely
 const getDimensions = () => {
@@ -46,6 +47,7 @@ const getResponsiveFont = (size) => {
 };
 
 export default function LocationSearch({ onLocationSelect }) {
+  const { t } = useI18n();
   const [searchQuery, setSearchQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState([]);
@@ -232,8 +234,9 @@ export default function LocationSearch({ onLocationSelect }) {
         navigator.geolocation.getCurrentPosition(
           (position) => {
             if (onLocationSelect) {
+              const { t } = require('../utils/i18n').useI18n();
               onLocationSelect({
-                name: 'Current Location',
+                name: t('info.currentLocation'),
                 address: `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`,
                 latitude: position.coords.latitude,
                 longitude: position.coords.longitude,
@@ -262,7 +265,7 @@ export default function LocationSearch({ onLocationSelect }) {
 
       if (onLocationSelect) {
         onLocationSelect({
-          name: 'Current Location',
+          name: t('info.currentLocation'),
           address: `${location.coords.latitude.toFixed(6)}, ${location.coords.longitude.toFixed(6)}`,
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
@@ -351,7 +354,7 @@ export default function LocationSearch({ onLocationSelect }) {
         >
           <View style={[styles.currentLocationContent, { pointerEvents: 'none' }]}>
             <LocationIcon size={getResponsiveSize(16)} color="#FFFFFF" />
-            <Text style={styles.currentLocationText}>Use Current Location</Text>
+            <Text style={styles.currentLocationText}>{t('info.useCurrentLocation')}</Text>
           </View>
         </LinearGradient>
       </TouchableOpacity>
@@ -409,14 +412,21 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   input: {
-    height: getResponsiveSize(44),
+    height: getResponsiveSize(48),
     backgroundColor: '#FFFFFF',
-    borderRadius: getResponsiveSize(12),
-    paddingHorizontal: getResponsiveSize(16),
-    fontSize: getResponsiveFont(14),
-    color: '#B8860B',
-    borderWidth: 2,
+    borderRadius: getResponsiveSize(14),
+    paddingHorizontal: getResponsiveSize(18),
+    fontSize: getResponsiveFont(15),
+    color: '#2C2C2C',
+    borderWidth: 2.5,
     borderColor: '#F4C430',
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
+    fontWeight: '500',
+    elevation: 2,
+    shadowColor: '#F4C430',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
   },
   suggestionsContainer: {
     position: 'absolute',
@@ -459,39 +469,46 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   suggestionName: {
-    fontSize: getResponsiveFont(13),
-    fontWeight: '600',
+    fontSize: getResponsiveFont(14),
+    fontWeight: '700',
     color: '#B8860B',
-    marginBottom: getResponsiveSize(2),
+    marginBottom: getResponsiveSize(3),
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   suggestionAddress: {
-    fontSize: getResponsiveFont(11),
+    fontSize: getResponsiveFont(12),
     color: '#8B7355',
+    fontWeight: '400',
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   searchButton: {
-    width: getResponsiveSize(44),
-    height: getResponsiveSize(44),
-    borderRadius: getResponsiveSize(12),
+    width: getResponsiveSize(48),
+    height: getResponsiveSize(48),
+    borderRadius: getResponsiveSize(14),
     backgroundColor: '#F4C430',
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
+    elevation: 6,
+    shadowColor: '#F4C430',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   searchButtonText: {
     fontSize: getResponsiveFont(18),
   },
   currentLocationButton: {
-    borderRadius: getResponsiveSize(12),
+    borderRadius: getResponsiveSize(14),
     overflow: 'hidden',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
+    elevation: 8,
+    shadowColor: '#F4C430',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   currentLocationGradient: {
     paddingVertical: getResponsiveSize(10),
@@ -507,9 +524,11 @@ const styles = StyleSheet.create({
   },
   currentLocationText: {
     color: '#FFFFFF',
-    fontSize: getResponsiveFont(13),
-    fontWeight: '600',
-    letterSpacing: 0.5,
+    fontSize: getResponsiveFont(14),
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)',
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   resultsContainer: {
     marginTop: getResponsiveSize(8),
@@ -547,15 +566,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   resultName: {
-    fontSize: getResponsiveFont(14),
-    fontWeight: '600',
+    fontSize: getResponsiveFont(15),
+    fontWeight: '700',
     color: '#B8860B',
     marginBottom: getResponsiveSize(4),
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   resultAddress: {
     fontSize: getResponsiveFont(12),
     color: '#8B7355',
-    lineHeight: getResponsiveFont(16),
+    lineHeight: getResponsiveFont(18),
+    fontWeight: '400',
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   noResults: {
     padding: getResponsiveSize(16),

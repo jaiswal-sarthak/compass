@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform } from '
 import { LinearGradient } from 'expo-linear-gradient';
 import CameraIcon from './icons/CameraIcon';
 import LocationIcon from './icons/LocationIcon';
+import { useI18n } from '../utils/i18n';
 
 // Get dimensions safely
 const getDimensions = () => {
@@ -42,6 +43,8 @@ const getResponsiveFont = (size) => {
 };
 
 export default function CompassBottomNav({ onCapturePress, onLastCapturedPress, hasCapturedImage }) {
+  const { t } = useI18n();
+  
   return (
     <View style={styles.container}>
       <TouchableOpacity
@@ -56,7 +59,7 @@ export default function CompassBottomNav({ onCapturePress, onLastCapturedPress, 
           style={styles.pillButton}
         >
           <CameraIcon size={getResponsiveSize(18)} color="#FFFFFF" />
-          <Text style={styles.buttonText}>Capture</Text>
+          <Text style={styles.buttonText}>{t('button.capture')}</Text>
         </LinearGradient>
       </TouchableOpacity>
 
@@ -84,7 +87,7 @@ export default function CompassBottomNav({ onCapturePress, onLastCapturedPress, 
             adjustsFontSizeToFit={true}
             minimumFontScale={0.65}
           >
-            Last Captured
+            {t('button.lastCaptured')}
           </Text>
         </LinearGradient>
       </TouchableOpacity>
@@ -128,14 +131,15 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   buttonText: {
-    fontSize: getResponsiveFont(13),
+    fontSize: getResponsiveFont(14),
     color: '#FFFFFF',
-    fontWeight: '700',
-    letterSpacing: 0.3,
-    textShadow: '0px 1px 2px rgba(0, 0, 0, 0.2)',
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    textShadow: '0px 2px 4px rgba(0, 0, 0, 0.3)',
     numberOfLines: 1,
     adjustsFontSizeToFit: true,
     minimumFontScale: 0.7,
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   disabledText: {
     color: '#FFFFFF',

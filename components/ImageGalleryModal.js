@@ -17,6 +17,7 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { getStoredImages, deleteImage, formatDate } from '../utils/imageStorage';
+import { useI18n } from '../utils/i18n';
 
 // Get dimensions safely
 const getDimensions = () => {
@@ -56,6 +57,7 @@ const getResponsiveFont = (size) => {
 };
 
 export default function ImageGalleryModal({ visible, onClose, onSelectImage }) {
+  const { t } = useI18n();
   const [images, setImages] = useState([]);
   const scale = useSharedValue(0);
 
@@ -104,13 +106,13 @@ export default function ImageGalleryModal({ visible, onClose, onSelectImage }) {
           <Animated.View style={[styles.content, animatedStyle]}>
             {/* Header */}
             <View style={styles.header}>
-              <Text style={styles.headerTitle}>Captured Images</Text>
+              <Text style={styles.headerTitle}>{t('gallery.title')}</Text>
               <TouchableOpacity
                 style={styles.closeButton}
                 onPress={onClose}
                 activeOpacity={0.8}
               >
-                <Text style={styles.closeButtonText}>✕</Text>
+                <Text style={styles.closeButtonText}>{t('common.close')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -118,7 +120,7 @@ export default function ImageGalleryModal({ visible, onClose, onSelectImage }) {
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
               {images.length === 0 ? (
                 <View style={styles.emptyState}>
-                  <Text style={styles.emptyText}>No captured images yet</Text>
+                  <Text style={styles.emptyText}>{t('gallery.noImages')}</Text>
                 </View>
               ) : (
                 images.map((image, index) => (
@@ -192,17 +194,26 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F4C430',
   },
   headerTitle: {
-    fontSize: getResponsiveFont(18),
-    fontWeight: '700',
+    fontSize: getResponsiveFont(20),
+    fontWeight: '900',
     color: '#B8860B',
+    letterSpacing: 0.5,
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   closeButton: {
-    width: getResponsiveSize(32),
-    height: getResponsiveSize(32),
-    borderRadius: getResponsiveSize(16),
+    width: getResponsiveSize(36),
+    height: getResponsiveSize(36),
+    borderRadius: getResponsiveSize(18),
     backgroundColor: '#F4C430',
     justifyContent: 'center',
     alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#F4C430',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   closeButtonText: {
     color: '#FFFFFF',
@@ -220,24 +231,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyText: {
-    fontSize: getResponsiveFont(14),
-    color: '#999999',
+    fontSize: getResponsiveFont(15),
+    color: '#8B7355',
     fontStyle: 'italic',
+    fontWeight: '500',
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   imageItem: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: getResponsiveSize(12),
-    padding: getResponsiveSize(12),
-    marginBottom: getResponsiveSize(12),
-    borderWidth: 1,
+    borderRadius: getResponsiveSize(14),
+    padding: getResponsiveSize(14),
+    marginBottom: getResponsiveSize(14),
+    borderWidth: 2,
     borderColor: '#F4C430',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    elevation: 6,
+    shadowColor: '#F4C430',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
   },
   thumbnail: {
     width: getResponsiveSize(80),
@@ -250,19 +263,24 @@ const styles = StyleSheet.create({
     marginLeft: getResponsiveSize(12),
   },
   imageDate: {
-    fontSize: getResponsiveFont(13),
-    fontWeight: '700',
+    fontSize: getResponsiveFont(14),
+    fontWeight: '900',
     color: '#B8860B',
-    marginBottom: getResponsiveSize(4),
+    marginBottom: getResponsiveSize(5),
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   imageMode: {
-    fontSize: getResponsiveFont(11),
+    fontSize: getResponsiveFont(12),
     color: '#666666',
-    marginBottom: getResponsiveSize(2),
+    marginBottom: getResponsiveSize(3),
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   imageHeading: {
-    fontSize: getResponsiveFont(11),
+    fontSize: getResponsiveFont(12),
     color: '#666666',
+    fontWeight: '500',
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   deleteButton: {
     width: getResponsiveSize(28),

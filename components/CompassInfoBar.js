@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform, Linking } from 'react-native';
 import * as Location from 'expo-location';
 import { Magnetometer } from 'expo-sensors';
+import { useI18n } from '../utils/i18n';
 
 // Get dimensions safely
 const getDimensions = () => {
@@ -41,6 +42,7 @@ const getResponsiveFont = (size) => {
 };
 
 export default function CompassInfoBar({ selectedLocation }) {
+  const { t } = useI18n();
   const [location, setLocation] = useState(null);
   const [hasPermission, setHasPermission] = useState(false);
   const [magneticField, setMagneticField] = useState(null);
@@ -167,7 +169,7 @@ export default function CompassInfoBar({ selectedLocation }) {
   return (
     <View style={styles.container}>
       <View style={styles.infoSection}>
-        <Text style={styles.infoLabel}>Geo-Coordinate:</Text>
+        <Text style={styles.infoLabel}>{t('info.geoCoordinate')}</Text>
         {!hasPermission && !displayLocation ? (
           <TouchableOpacity
             style={styles.permissionWarning}
@@ -175,7 +177,7 @@ export default function CompassInfoBar({ selectedLocation }) {
             activeOpacity={0.7}
           >
             <Text style={styles.warningIcon}>⚠️</Text>
-            <Text style={styles.warningText}>Location Permission Required (Click Here)</Text>
+            <Text style={styles.warningText}>{t('info.locationPermission')}</Text>
           </TouchableOpacity>
         ) : displayLocation ? (
           <Text style={styles.coordinateText}>
@@ -187,9 +189,9 @@ export default function CompassInfoBar({ selectedLocation }) {
       </View>
 
       <View style={styles.infoSection}>
-        <Text style={styles.infoLabel}>Magnetic Field:</Text>
+        <Text style={styles.infoLabel}>{t('info.magneticField')}</Text>
         <View style={styles.magneticFieldRow}>
-          <Text style={styles.magneticLabel}>Strength: </Text>
+          <Text style={styles.magneticLabel}>{t('info.strength')}: </Text>
           <Text style={styles.magneticValue}>
             {magneticField ? `${Math.round(magneticField)} µT` : '-- µT'}
           </Text>
@@ -215,11 +217,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   infoLabel: {
-    fontSize: getResponsiveFont(11),
+    fontSize: getResponsiveFont(12),
     color: '#B8860B',
-    fontWeight: '700',
-    marginBottom: getResponsiveSize(4),
-    letterSpacing: 0.5,
+    fontWeight: '900',
+    marginBottom: getResponsiveSize(5),
+    letterSpacing: 0.6,
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   permissionWarning: {
     flexDirection: 'row',
@@ -230,28 +233,32 @@ const styles = StyleSheet.create({
     fontSize: getResponsiveFont(14),
   },
   warningText: {
-    fontSize: getResponsiveFont(10),
+    fontSize: getResponsiveFont(11),
     color: '#FF0000',
-    fontWeight: '500',
+    fontWeight: '700',
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   coordinateText: {
-    fontSize: getResponsiveFont(10),
+    fontSize: getResponsiveFont(11),
     color: '#666666',
-    fontFamily: 'monospace',
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', monospace" : 'monospace',
+    fontWeight: '500',
   },
   magneticFieldRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   magneticLabel: {
-    fontSize: getResponsiveFont(10),
+    fontSize: getResponsiveFont(11),
     color: '#000000',
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   magneticValue: {
-    fontSize: getResponsiveFont(10),
+    fontSize: getResponsiveFont(11),
     color: '#FF0000',
-    fontWeight: '600',
-    fontFamily: 'monospace',
+    fontWeight: '700',
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', monospace" : 'monospace',
   },
 });
 

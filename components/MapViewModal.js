@@ -14,6 +14,7 @@ import {
 import CompassView from './CompassView';
 import CompassTopBar from './CompassTopBar';
 import LocationSearch from './LocationSearch';
+import { useI18n, translateDevta as translateDevtaName } from '../utils/i18n';
 import { 
   DownloadIcon, 
   RecenterIcon, 
@@ -23,15 +24,7 @@ import {
   MapLayerIcon 
 } from './svgs';
 import * as Location from 'expo-location';
-import {
-  latLngToXY,
-  xyToLatLng,
-  averageCenter,
-  sortCornersAsRect,
-  createGridLinesXY,
-  getCellCenterXY,
-  getCellCornersXY,
-} from '../utils/mapUtils';
+// Removed mapUtils imports - using simple inline calculations instead
 import {
   VASTU_GRID_9X9,
   getBrahmasthanCells,
@@ -82,6 +75,7 @@ const getResponsiveFont = (size) => {
 };
 
 export default function MapViewModal({ visible, onClose, mode, compassType, selectedLocation }) {
+  const { t, language } = useI18n();
   const [currentLocation, setCurrentLocation] = useState(null);
   const [heading, setHeading] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -263,10 +257,43 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
     gridLayersRef.current = [];
     
     try {
-      const center = averageCenter(plotCorners);
-      const xyCorners = plotCorners.map(p => latLngToXY(center, p));
-      const rectXY = sortCornersAsRect(xyCorners);
-      const { verticalLines, horizontalLines } = createGridLinesXY(rectXY);
+      // Calculate center as average of corners
+      const center = {
+        latitude: plotCorners.reduce((sum, p) => sum + p.latitude, 0) / 4,
+        longitude: plotCorners.reduce((sum, p) => sum + p.longitude, 0) / 4,
+      };
+      
+      // Generate grid lines (simple interpolation)
+      const verticalLines = [];
+      const horizontalLines = [];
+      for (let i = 0; i <= 9; i++) {
+        const t = i / 9;
+        // Vertical line
+        const vLine = [
+          {
+            x: plotCorners[0].latitude + (plotCorners[1].latitude - plotCorners[0].latitude) * t,
+            y: plotCorners[0].longitude + (plotCorners[1].longitude - plotCorners[0].longitude) * t,
+          },
+          {
+            x: plotCorners[3].latitude + (plotCorners[2].latitude - plotCorners[3].latitude) * t,
+            y: plotCorners[3].longitude + (plotCorners[2].longitude - plotCorners[3].longitude) * t,
+          },
+        ];
+        verticalLines.push(vLine);
+        
+        // Horizontal line
+        const hLine = [
+          {
+            x: plotCorners[0].latitude + (plotCorners[3].latitude - plotCorners[0].latitude) * t,
+            y: plotCorners[0].longitude + (plotCorners[3].longitude - plotCorners[0].longitude) * t,
+          },
+          {
+            x: plotCorners[1].latitude + (plotCorners[2].latitude - plotCorners[1].latitude) * t,
+            y: plotCorners[1].longitude + (plotCorners[2].longitude - plotCorners[1].longitude) * t,
+          },
+        ];
+        horizontalLines.push(hLine);
+      }
       
       // Draw plot outline
       const plotLatLngs = plotCorners.map(p => [p.latitude, p.longitude]);
@@ -280,10 +307,7 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
       
       // Draw vertical grid lines
       verticalLines.forEach((line) => {
-        const latLngs = line.map(p => {
-          const coord = xyToLatLng(center, p.x, p.y);
-          return [coord.latitude, coord.longitude];
-        });
+        const latLngs = [[line[0].x, line[0].y], [line[1].x, line[1].y]];
         const polyline = window.L.polyline(latLngs, {
           color: '#F4C430',
           weight: 1,
@@ -294,10 +318,7 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
       
       // Draw horizontal grid lines
       horizontalLines.forEach((line) => {
-        const latLngs = line.map(p => {
-          const coord = xyToLatLng(center, p.x, p.y);
-          return [coord.latitude, coord.longitude];
-        });
+        const latLngs = [[line[0].x, line[0].y], [line[1].x, line[1].y]];
         const polyline = window.L.polyline(latLngs, {
           color: '#F4C430',
           weight: 1,
@@ -306,16 +327,35 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
         gridLayersRef.current.push(polyline);
       });
       
-      // Highlight Brahmasthan (center 9 cells)
+      // Highlight Brahmasthan (center 9 cells: rows 3-5, cols 3-5)
       if (highlightBrahmasthan) {
         const brahmasthanCells = getBrahmasthanCells();
         brahmasthanCells.forEach(({ row, col }) => {
-          const corners = getCellCornersXY(rectXY, row, col);
-          const latLngs = corners.map(p => {
-            const coord = xyToLatLng(center, p.x, p.y);
-            return [coord.latitude, coord.longitude];
-          });
-          const polygon = window.L.polygon(latLngs, {
+          // Calculate cell corners using simple interpolation
+          const rowStart = row / 9;
+          const rowEnd = (row + 1) / 9;
+          const colStart = col / 9;
+          const colEnd = (col + 1) / 9;
+          
+          // Calculate 4 corners of the cell
+          const blLat = plotCorners[0].latitude + (plotCorners[1].latitude - plotCorners[0].latitude) * colStart + (plotCorners[3].latitude - plotCorners[0].latitude) * rowStart;
+          const blLng = plotCorners[0].longitude + (plotCorners[1].longitude - plotCorners[0].longitude) * colStart + (plotCorners[3].longitude - plotCorners[0].longitude) * rowStart;
+          
+          const brLat = plotCorners[0].latitude + (plotCorners[1].latitude - plotCorners[0].latitude) * colEnd + (plotCorners[3].latitude - plotCorners[0].latitude) * rowStart;
+          const brLng = plotCorners[0].longitude + (plotCorners[1].longitude - plotCorners[0].longitude) * colEnd + (plotCorners[3].longitude - plotCorners[0].longitude) * rowStart;
+          
+          const trLat = plotCorners[0].latitude + (plotCorners[1].latitude - plotCorners[0].latitude) * colEnd + (plotCorners[3].latitude - plotCorners[0].latitude) * rowEnd;
+          const trLng = plotCorners[0].longitude + (plotCorners[1].longitude - plotCorners[0].longitude) * colEnd + (plotCorners[3].longitude - plotCorners[0].longitude) * rowEnd;
+          
+          const tlLat = plotCorners[0].latitude + (plotCorners[1].latitude - plotCorners[0].latitude) * colStart + (plotCorners[3].latitude - plotCorners[0].latitude) * rowEnd;
+          const tlLng = plotCorners[0].longitude + (plotCorners[1].longitude - plotCorners[0].longitude) * colStart + (plotCorners[3].longitude - plotCorners[0].longitude) * rowEnd;
+          
+          const polygon = window.L.polygon([
+            [blLat, blLng],
+            [brLat, brLng],
+            [trLat, trLng],
+            [tlLat, tlLng],
+          ], {
             color: '#FFA500',
             fillColor: '#FFA500',
             fillOpacity: 0.3,
@@ -327,11 +367,22 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
       
       // Draw devta labels
       if (showDevtaLabels) {
+        const currentLang = language || 'en';
         for (let row = 0; row < 9; row++) {
           for (let col = 0; col < 9; col++) {
             const devtaInfo = VASTU_GRID_9X9[row][col];
-            const cellCenter = getCellCenterXY(rectXY, row, col);
-            const coord = xyToLatLng(center, cellCenter.x, cellCenter.y);
+            const translatedDevtaName = translateDevtaName(devtaInfo.devta, currentLang);
+            
+            // Calculate cell center using simple interpolation
+            const rowCenter = (row + 0.5) / 9;
+            const colCenter = (col + 0.5) / 9;
+            
+            const cellLat = plotCorners[0].latitude + 
+              (plotCorners[1].latitude - plotCorners[0].latitude) * colCenter +
+              (plotCorners[3].latitude - plotCorners[0].latitude) * rowCenter;
+            const cellLng = plotCorners[0].longitude + 
+              (plotCorners[1].longitude - plotCorners[0].longitude) * colCenter +
+              (plotCorners[3].longitude - plotCorners[0].longitude) * rowCenter;
             
             const devtaIcon = window.L.divIcon({
               className: 'devta-label',
@@ -342,23 +393,24 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
                 border-radius: 4px;
                 font-size: 9px;
                 font-weight: bold;
+                font-family: 'DM Sans', sans-serif;
                 white-space: nowrap;
                 border: 1px solid white;
                 box-shadow: 0 1px 3px rgba(0,0,0,0.3);
                 text-align: center;
-              ">${devtaInfo.devta}<br/><span style="font-size: 7px;">${devtaInfo.zone}</span></div>`,
+              ">${translatedDevtaName}<br/><span style="font-size: 7px; font-family: 'DM Sans', sans-serif;">${devtaInfo.zone}</span></div>`,
               iconSize: [null, null],
               iconAnchor: [0, 0]
             });
             
-            const marker = window.L.marker([coord.latitude, coord.longitude], {
+            const marker = window.L.marker([cellLat, cellLng], {
               icon: devtaIcon
             }).addTo(googleMapRef.current);
             
             // Add tooltip with more info
             marker.bindTooltip(`
-              <div style="text-align: center;">
-                <strong>${devtaInfo.devta}</strong><br/>
+              <div style="text-align: center; font-family: 'DM Sans', sans-serif;">
+                <strong style="font-family: 'DM Sans', sans-serif;">${translatedDevtaName}</strong><br/>
                 Zone: ${devtaInfo.zone}<br/>
                 Energy: ${devtaInfo.energy}
               </div>
@@ -580,7 +632,7 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
       console.log('🎨 Drawing Vastu grid with corners:', plotCorners);
       drawVastuGrid();
     }
-  }, [plotCorners, showDevtaLabels, highlightBrahmasthan, cornerSelectionMode]);
+  }, [plotCorners, showDevtaLabels, highlightBrahmasthan, cornerSelectionMode, language]);
 
   const initializeLeafletMap = () => {
     let retryCount = 0;
@@ -669,7 +721,7 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
             icon: goldIcon
           }).addTo(map);
           
-          marker.bindPopup('Current Location').openPopup();
+          marker.bindPopup(t('info.currentLocation')).openPopup();
 
           googleMapRef.current = map;
           setMapReady(true);
@@ -765,7 +817,7 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#F4C430" />
-            <Text style={styles.loadingText}>Loading Map...</Text>
+            <Text style={styles.loadingText}>{t('map.loading')}</Text>
           </View>
         ) : locationToUse ? (
           Platform.OS === 'web' ? (
@@ -849,13 +901,13 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
                   latitude: locationToUse.latitude,
                   longitude: locationToUse.longitude,
                 }}
-                title="Current Location"
+                title={t('info.currentLocation')}
               />
             </MapView>
           )
         ) : (
           <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>Unable to load map</Text>
+            <Text style={styles.errorText}>{t('map.error')}</Text>
           </View>
         )}
 
@@ -1034,10 +1086,10 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.cornerSelectionTitle}>
-                🎯 ADJUST PLOT CORNERS
+                🎯 {t('map.cornerSelection.title')}
               </Text>
               <Text style={styles.cornerSelectionText}>
-                👆 Drag red numbered dots (1→4) to mark your plot boundaries
+                👆 {t('map.cornerSelection.subtitle')}
               </Text>
             </View>
             <TouchableOpacity
@@ -1063,9 +1115,9 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
         {/* Vastu Grid Info Banner */}
         {showVastuGrid && plotCorners.length === 4 && (
           <View style={styles.vastuInfoBanner}>
-            <Text style={styles.vastuInfoTitle}>✨ Vastu Grid Active</Text>
+            <Text style={styles.vastuInfoTitle}>✨ {t('map.gridActive.title')}</Text>
             <Text style={styles.vastuInfoText}>
-              🕉️ Brahmasthan (sacred center) highlighted
+              🕉️ {t('map.gridActive.subtitle')}
             </Text>
           </View>
         )}
@@ -1093,12 +1145,12 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
         {locationToUse && (
           <View style={styles.bottomInfo}>
             <View style={styles.infoBox}>
-              <Text style={styles.infoLabel}>Geo-Coordinate:</Text>
+              <Text style={styles.infoLabel}>{t('map.geoCoordinate')}</Text>
               <Text style={styles.infoValue}>
-                Latitude: {locationToUse.latitude.toFixed(7)}
+                {t('map.latitude')}: {locationToUse.latitude.toFixed(7)}
               </Text>
               <Text style={styles.infoValue}>
-                Longitude: {locationToUse.longitude.toFixed(7)}
+                {t('map.longitude')}: {locationToUse.longitude.toFixed(7)}
               </Text>
             </View>
           </View>

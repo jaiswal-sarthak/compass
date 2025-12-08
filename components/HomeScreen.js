@@ -24,6 +24,8 @@ import Vastu32Compass from './compassModes/Vastu32Compass';
 import ChakraCompass from './compassModes/ChakraCompass';
 import Sidebar from './Sidebar';
 import CompassIcon from './icons/CompassIcon';
+import LanguageToggle from './LanguageToggle';
+import { useI18n } from '../utils/i18n';
 
 // Get dimensions safely
 const getDimensions = () => {
@@ -63,28 +65,28 @@ const getResponsiveFont = (size) => {
   return Math.max(size * scale, size * 0.85);
 };
 
-const COMPASS_TYPES = [
+const getCompassTypes = (t) => [
   {
     id: 'normal',
-    title: 'Normal Compass',
+    title: t('compass.normal'),
     CompassComponent: NormalCompassPreview,
     colors: ['#F4C430', '#FFD700'],
   },
   {
     id: 'vastu16',
-    title: '16 Zone Vastu Compass',
+    title: t('compass.vastu16'),
     CompassComponent: Vastu16CompassPreview,
     colors: ['#FF9933', '#FF8C00'],
   },
   {
     id: 'vastu32',
-    title: '32 Zone Vastu Compass',
+    title: t('compass.vastu32'),
     CompassComponent: Vastu32Compass,
     colors: ['#DAA520', '#F4C430'],
   },
   {
     id: 'chakra',
-    title: 'Vastu Chakra',
+    title: t('compass.chakra'),
     CompassComponent: ChakraCompass,
     colors: ['#B8860B', '#DAA520'],
   },
@@ -160,10 +162,13 @@ function CompassCard({ compass, onPress, delay = 0 }) {
 }
 
 export default function HomeScreen({ onSelectCompass, onServicePress, compassType, onCompassTypeChange }) {
+  const { t } = useI18n();
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [showHowToUse, setShowHowToUse] = useState(false);
   const headerOpacity = useSharedValue(0);
   const headerTranslateY = useSharedValue(-15);
+  
+  const COMPASS_TYPES = getCompassTypes(t);
 
   React.useEffect(() => {
     headerOpacity.value = withTiming(1, { duration: 500, easing: Easing.out(Easing.cubic) });
@@ -206,16 +211,16 @@ export default function HomeScreen({ onSelectCompass, onServicePress, compassTyp
                 </TouchableOpacity>
                 <View style={styles.headerTitleContainer}>
                   <CompassIcon size={getResponsiveSize(18)} color="#FFFFFF" />
-                  <Text style={styles.headerTitle}>Compass - Vastu</Text>
+                  <Text style={styles.headerTitle}>{t('app.title')}</Text>
                 </View>
-                <View style={styles.headerSpacer} />
+                <LanguageToggle />
               </View>
             </LinearGradient>
           </Animated.View>
 
           {/* Select Compass Type Label */}
           <Animated.View style={[styles.selectLabelContainer, headerStyle]}>
-            <Text style={styles.selectLabel}>Select Compasses Type</Text>
+            <Text style={styles.selectLabel}>{t('header.selectCompass')}</Text>
           </Animated.View>
 
           {/* Compass Type Cards */}
@@ -239,8 +244,8 @@ export default function HomeScreen({ onSelectCompass, onServicePress, compassTyp
                 </View>
               </View>
               <View style={styles.footerTextContainer}>
-                <Text style={styles.footerText}>Vastu</Text>
-                <Text style={styles.footerTextDot}>.com</Text>
+                <Text style={styles.footerText}>{t('footer.vastu')}</Text>
+                <Text style={styles.footerTextDot}>{t('footer.com')}</Text>
               </View>
             </View>
             <View style={styles.footerLine} />
@@ -267,49 +272,49 @@ export default function HomeScreen({ onSelectCompass, onServicePress, compassTyp
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>How to Use Vastu Compass</Text>
+              <Text style={styles.modalTitle}>{t('instructions.title')}</Text>
               <TouchableOpacity
                 onPress={() => setShowHowToUse(false)}
                 style={styles.modalCloseButton}
               >
-                <Text style={styles.modalCloseText}>✕</Text>
+                <Text style={styles.modalCloseText}>{t('common.close')}</Text>
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
               <View style={styles.instructionItem}>
                 <Text style={styles.instructionNumber}>1</Text>
                 <Text style={styles.instructionText}>
-                  Select a compass type from the home screen (Normal, 16 Zone, 32 Zone, or Chakra).
+                  {t('instructions.step1')}
                 </Text>
               </View>
               <View style={styles.instructionItem}>
                 <Text style={styles.instructionNumber}>2</Text>
                 <Text style={styles.instructionText}>
-                  Hold your device flat and allow the compass to calibrate. The red needle will point to magnetic North.
+                  {t('instructions.step2')}
                 </Text>
               </View>
               <View style={styles.instructionItem}>
                 <Text style={styles.instructionNumber}>3</Text>
                 <Text style={styles.instructionText}>
-                  Use the "Search Location" button to find and set a specific location for accurate readings.
+                  {t('instructions.step3')}
                 </Text>
               </View>
               <View style={styles.instructionItem}>
                 <Text style={styles.instructionNumber}>4</Text>
                 <Text style={styles.instructionText}>
-                  Use the "Capture" button to take a photo that will be displayed behind the compass for reference.
+                  {t('instructions.step4')}
                 </Text>
               </View>
               <View style={styles.instructionItem}>
                 <Text style={styles.instructionNumber}>5</Text>
                 <Text style={styles.instructionText}>
-                  Adjust the image size using the +/- buttons to see more or less of your captured image.
+                  {t('instructions.step5')}
                 </Text>
               </View>
               <View style={styles.instructionItem}>
                 <Text style={styles.instructionNumber}>6</Text>
                 <Text style={styles.instructionText}>
-                  The compass uses tilt compensation for maximum accuracy, so it works even when your device is slightly tilted.
+                  {t('instructions.step6')}
                 </Text>
               </View>
             </ScrollView>
@@ -335,13 +340,13 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingTop: Platform.OS === 'ios' ? getResponsiveSize(50) : getResponsiveSize(40),
-    paddingBottom: getResponsiveSize(12),
+    paddingBottom: getResponsiveSize(16),
     paddingHorizontal: getResponsiveSize(12),
-    elevation: 8,
+    elevation: 12,
     shadowColor: '#F4C430',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
   },
   headerGradient: {
     borderRadius: getResponsiveSize(12),
@@ -380,14 +385,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: getResponsiveFont(15),
-    fontWeight: '700',
+    fontSize: getResponsiveFont(16),
+    fontWeight: '900',
     color: '#FFFFFF',
-    textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)',
-    letterSpacing: 0.5,
-  },
-  headerSpacer: {
-    width: getResponsiveSize(28),
+    textShadow: '0px 2px 6px rgba(0, 0, 0, 0.4)',
+    letterSpacing: 0.8,
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   selectLabelContainer: {
     paddingHorizontal: getResponsiveSize(15),
@@ -399,6 +402,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#0066CC',
     textAlign: 'center',
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   compassGrid: {
     flexDirection: 'row',
@@ -412,30 +416,33 @@ const styles = StyleSheet.create({
     marginBottom: getResponsiveSize(10),
   },
   card: {
-    borderRadius: getResponsiveSize(10),
+    borderRadius: getResponsiveSize(16),
     backgroundColor: '#FFFFFF',
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: '#F4C430',
-    elevation: 6,
+    elevation: 8,
     shadowColor: '#F4C430',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
     overflow: 'hidden',
-    height: getResponsiveSize(170), // Fixed height for all cards
+    height: getResponsiveSize(180),
+    position: 'relative',
   },
   cardPressed: {
     borderColor: '#FFD700',
-    elevation: 8,
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    elevation: 12,
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    transform: [{ scale: 0.98 }],
   },
   cardInner: {
     width: '100%',
     height: '100%',
-    padding: getResponsiveSize(10),
+    padding: getResponsiveSize(14),
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
   },
   compassPreview: {
     marginBottom: getResponsiveSize(6),
@@ -445,12 +452,14 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   cardTitle: {
-    fontSize: getResponsiveFont(11),
-    fontWeight: '600',
+    fontSize: getResponsiveFont(12),
+    fontWeight: '700',
     color: '#2C2C2C',
     textAlign: 'center',
-    lineHeight: getResponsiveFont(14),
-    minHeight: getResponsiveSize(32), // Fixed minimum height for title area
+    lineHeight: getResponsiveFont(16),
+    minHeight: getResponsiveSize(36),
+    letterSpacing: 0.3,
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   footer: {
     alignItems: 'center',
@@ -495,11 +504,13 @@ const styles = StyleSheet.create({
     fontSize: getResponsiveFont(13),
     fontWeight: '600',
     color: '#2C2C2C',
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   footerTextDot: {
     fontSize: getResponsiveFont(13),
     fontWeight: '600',
     color: '#4CAF50',
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   footerLine: {
     width: '85%',
@@ -508,49 +519,62 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: getResponsiveSize(20),
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
-    borderRadius: getResponsiveSize(16),
+    borderRadius: getResponsiveSize(20),
     width: '100%',
     maxWidth: getResponsiveSize(400),
     maxHeight: '80%',
-    elevation: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
+    elevation: 16,
+    shadowColor: '#F4C430',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(244, 196, 48, 0.2)',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: getResponsiveSize(20),
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    padding: getResponsiveSize(24),
+    borderBottomWidth: 2,
+    borderBottomColor: 'rgba(244, 196, 48, 0.2)',
+    backgroundColor: '#FFF8E1',
   },
   modalTitle: {
-    fontSize: getResponsiveFont(20),
-    fontWeight: '700',
+    fontSize: getResponsiveFont(22),
+    fontWeight: '900',
     color: '#B8860B',
     flex: 1,
+    letterSpacing: 0.5,
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   modalCloseButton: {
-    width: getResponsiveSize(32),
-    height: getResponsiveSize(32),
-    borderRadius: getResponsiveSize(16),
-    backgroundColor: 'rgba(184, 134, 11, 0.1)',
+    width: getResponsiveSize(36),
+    height: getResponsiveSize(36),
+    borderRadius: getResponsiveSize(18),
+    backgroundColor: 'rgba(184, 134, 11, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(184, 134, 11, 0.3)',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
   },
   modalCloseText: {
     fontSize: getResponsiveFont(18),
     color: '#B8860B',
     fontWeight: '600',
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   modalBody: {
     padding: getResponsiveSize(20),
@@ -561,21 +585,29 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   instructionNumber: {
-    width: getResponsiveSize(28),
-    height: getResponsiveSize(28),
-    borderRadius: getResponsiveSize(14),
+    width: getResponsiveSize(32),
+    height: getResponsiveSize(32),
+    borderRadius: getResponsiveSize(16),
     backgroundColor: '#F4C430',
     color: '#FFFFFF',
-    fontSize: getResponsiveFont(14),
-    fontWeight: '700',
+    fontSize: getResponsiveFont(15),
+    fontWeight: '900',
     textAlign: 'center',
-    lineHeight: getResponsiveSize(28),
-    marginRight: getResponsiveSize(12),
+    lineHeight: getResponsiveSize(32),
+    marginRight: getResponsiveSize(14),
+    elevation: 3,
+    shadowColor: '#F4C430',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
   instructionText: {
     flex: 1,
-    fontSize: getResponsiveFont(14),
+    fontSize: getResponsiveFont(15),
     color: '#2C2C2C',
-    lineHeight: getResponsiveFont(20),
+    lineHeight: getResponsiveFont(22),
+    fontWeight: '500',
+    fontFamily: Platform.OS === 'web' ? "'DM Sans', sans-serif" : 'System',
   },
 });
