@@ -1,395 +1,169 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import Svg, { Circle, Line, Text as SvgText, G, Path, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
-
-const DIRECTIONS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-const CARDINAL_DIRECTIONS = ['N', 'E', 'S', 'W'];
+import Svg, { 
+  Circle, 
+  Line, 
+  Text as SvgText, 
+  G, 
+  Path, 
+  Defs, 
+  LinearGradient, 
+  Stop,
+  RadialGradient
+} from 'react-native-svg';
 
 export default function NormalCompass({ size }) {
-  const center = size / 2;
-  const radius = size / 2 - 20;
-  const innerRadius = radius - 40;
-  const watermarkRadius = radius - 10;
-
-  const getDirectionPosition = (index, isCardinal = false) => {
-    const angle = (index * 45 - 90) * (Math.PI / 180);
-    const r = isCardinal ? radius - 15 : radius - 5;
-    return {
-      x: center + r * Math.cos(angle),
-      y: center + r * Math.sin(angle),
-      angle: index * 45,
-    };
-  };
-
-  // Create watermark text path
-  const createWatermarkPath = (angle) => {
-    const angleRad = (angle - 90) * (Math.PI / 180);
-    const x = center + watermarkRadius * Math.cos(angleRad);
-    const y = center + watermarkRadius * Math.sin(angleRad);
-    return { x, y, angle };
-  };
-
   return (
     <View style={[styles.container, { width: size, height: size }]}>
-      <Svg width={size} height={size}>
+      <Svg width={size} height={size} viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet">
         <Defs>
-          {/* Water gradient (North) */}
-          <SvgLinearGradient id="waterGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-            <Stop offset="0%" stopColor="#1E3A8A" stopOpacity="1" />
-            <Stop offset="100%" stopColor="#3B82F6" stopOpacity="1" />
-          </SvgLinearGradient>
+          {/* Gradients */}
+          <RadialGradient id="compassBg" cx="50%" cy="50%" r="50%">
+            <Stop offset="0%" stopColor="#FFFEF7" stopOpacity="1" />
+            <Stop offset="100%" stopColor="#FFF8DC" stopOpacity="1" />
+          </RadialGradient>
           
-          {/* Fire gradient (East) */}
-          <SvgLinearGradient id="fireGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-            <Stop offset="0%" stopColor="#10B981" stopOpacity="1" />
-            <Stop offset="100%" stopColor="#EF4444" stopOpacity="1" />
-          </SvgLinearGradient>
+          <LinearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <Stop offset="0%" stopColor="#FFD700" stopOpacity="1" />
+            <Stop offset="50%" stopColor="#FDB931" stopOpacity="1" />
+            <Stop offset="100%" stopColor="#D4AF37" stopOpacity="1" />
+          </LinearGradient>
           
-          {/* Earth gradient (South) */}
-          <SvgLinearGradient id="earthGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-            <Stop offset="0%" stopColor="#FCD34D" stopOpacity="1" />
-            <Stop offset="100%" stopColor="#F97316" stopOpacity="1" />
-          </SvgLinearGradient>
+          <LinearGradient id="needleGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <Stop offset="0%" stopColor="#FFD700" stopOpacity="1" />
+            <Stop offset="50%" stopColor="#FFA500" stopOpacity="1" />
+            <Stop offset="100%" stopColor="#FF8C00" stopOpacity="1" />
+          </LinearGradient>
           
-          {/* Air gradient (West) */}
-          <SvgLinearGradient id="airGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-            <Stop offset="0%" stopColor="#9CA3AF" stopOpacity="1" />
-            <Stop offset="100%" stopColor="#60A5FA" stopOpacity="1" />
-          </SvgLinearGradient>
+          <RadialGradient id="centerGrad" cx="50%" cy="50%" r="50%">
+            <Stop offset="0%" stopColor="#6B7280" stopOpacity="1" />
+            <Stop offset="50%" stopColor="#4B5563" stopOpacity="1" />
+            <Stop offset="100%" stopColor="#374151" stopOpacity="1" />
+          </RadialGradient>
         </Defs>
 
-        {/* Outer ring - Elemental segments */}
-        {/* North - Water (top) */}
-        <Path
-          d={`M ${center} ${center - radius} 
-              A ${radius} ${radius} 0 0 1 ${center + radius} ${center}
-              L ${center} ${center} Z`}
-          fill="url(#waterGradient)"
-        />
+        {/* Outer decorative ring */}
+        <Circle cx="200" cy="200" r="190" fill="none" stroke="url(#goldGrad)" strokeWidth="6" opacity="0.3"/>
+        <Circle cx="200" cy="200" r="185" fill="none" stroke="#FFD700" strokeWidth="2"/>
         
-        {/* East - Fire (right) */}
-        <Path
-          d={`M ${center + radius} ${center}
-              A ${radius} ${radius} 0 0 1 ${center} ${center + radius}
-              L ${center} ${center} Z`}
-          fill="url(#fireGradient)"
-        />
-        
-        {/* South - Earth (bottom) */}
-        <Path
-          d={`M ${center} ${center + radius}
-              A ${radius} ${radius} 0 0 1 ${center - radius} ${center}
-              L ${center} ${center} Z`}
-          fill="url(#earthGradient)"
-        />
-        
-        {/* West - Air (left) */}
-        <Path
-          d={`M ${center - radius} ${center}
-              A ${radius} ${radius} 0 0 1 ${center} ${center - radius}
-              L ${center} ${center} Z`}
-          fill="url(#airGradient)"
-        />
-
-        {/* Faint human figure outline (Vastu Purusha) */}
-        <G opacity="0.15">
-          {/* Head */}
-          <Circle
-            cx={center}
-            cy={center - innerRadius + 40}
-            r={innerRadius * 0.15}
-            fill="none"
-            stroke="#60A5FA"
-            strokeWidth="1.5"
-          />
-          
-          {/* Body/Torso */}
-          <Path
-            d={`M ${center} ${center - innerRadius + 60}
-                Q ${center + innerRadius * 0.2} ${center - 20} ${center} ${center}
-                Q ${center - innerRadius * 0.2} ${center - 20} ${center} ${center - innerRadius + 60} Z`}
-            fill="none"
-            stroke="#60A5FA"
-            strokeWidth="1.5"
-          />
-          
-          {/* Arms */}
-          <Line
-            x1={center - innerRadius * 0.25}
-            y1={center - innerRadius * 0.3}
-            x2={center - innerRadius * 0.4}
-            y2={center - innerRadius * 0.1}
-            stroke="#60A5FA"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-          />
-          <Line
-            x1={center + innerRadius * 0.25}
-            y1={center - innerRadius * 0.3}
-            x2={center + innerRadius * 0.4}
-            y2={center - innerRadius * 0.1}
-            stroke="#60A5FA"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-          />
-          
-          {/* Legs (cross-legged position) */}
-          <Path
-            d={`M ${center - innerRadius * 0.15} ${center + innerRadius * 0.2}
-                Q ${center - innerRadius * 0.3} ${center + innerRadius * 0.4} ${center - innerRadius * 0.2} ${center + innerRadius * 0.5}
-                Q ${center} ${center + innerRadius * 0.45} ${center - innerRadius * 0.1} ${center + innerRadius * 0.35}`}
-            fill="none"
-            stroke="#60A5FA"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-          />
-          <Path
-            d={`M ${center + innerRadius * 0.15} ${center + innerRadius * 0.2}
-                Q ${center + innerRadius * 0.3} ${center + innerRadius * 0.4} ${center + innerRadius * 0.2} ${center + innerRadius * 0.5}
-                Q ${center} ${center + innerRadius * 0.45} ${center + innerRadius * 0.1} ${center + innerRadius * 0.35}`}
-            fill="none"
-            stroke="#60A5FA"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-          />
-        </G>
-
-        {/* Inner white circle */}
-        <Circle
-          cx={center}
-          cy={center}
-          r={innerRadius}
-          fill="#FFFFFF"
-          stroke="#E5E7EB"
-          strokeWidth="2"
-        />
-
-        {/* Center Ether circle */}
-        <Circle
-          cx={center}
-          cy={center}
-          r={innerRadius - 30}
-          fill="#FFFFFF"
-          stroke="#D1D5DB"
-          strokeWidth="2"
-        />
-
-
-        {/* Compass needle - 3D arrow design */}
-        <Defs>
-          {/* Red gradient for North arrow */}
-          <SvgLinearGradient id="redGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <Stop offset="0%" stopColor="#8b1a1a" stopOpacity="1" />
-            <Stop offset="50%" stopColor="#c62828" stopOpacity="1" />
-            <Stop offset="100%" stopColor="#5a0f0f" stopOpacity="1" />
-          </SvgLinearGradient>
-          
-          {/* Blue gradient for other arrows */}
-          <SvgLinearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <Stop offset="0%" stopColor="#1a4d7a" stopOpacity="1" />
-            <Stop offset="50%" stopColor="#2c5f8d" stopOpacity="1" />
-            <Stop offset="100%" stopColor="#0d3352" stopOpacity="1" />
-          </SvgLinearGradient>
-        </Defs>
-        
-        <G>
-          {/* North arrow (Red/Dark red gradient) - 3D diamond shape */}
-          <Path
-            d={`M ${center} ${center} 
-                L ${center - 8} ${center + 8} 
-                L ${center} ${center - (innerRadius - 20)} 
-                L ${center + 8} ${center + 8} Z`}
-            fill="url(#redGrad)"
-            stroke="#5a0f0f"
-            strokeWidth="1"
-            opacity="0.9"
-          />
-          
-          {/* East arrow (Blue) - 3D diamond shape */}
-          <Path
-            d={`M ${center} ${center} 
-                L ${center - 8} ${center - 8} 
-                L ${center + (innerRadius - 20)} ${center} 
-                L ${center - 8} ${center + 8} Z`}
-            fill="url(#blueGrad)"
-            stroke="#0d3352"
-            strokeWidth="1"
-            opacity="0.9"
-          />
-          
-          {/* South arrow (Blue) - 3D diamond shape */}
-          <Path
-            d={`M ${center} ${center} 
-                L ${center + 8} ${center - 8} 
-                L ${center} ${center + (innerRadius - 20)} 
-                L ${center - 8} ${center - 8} Z`}
-            fill="url(#blueGrad)"
-            stroke="#0d3352"
-            strokeWidth="1"
-            opacity="0.9"
-          />
-          
-          {/* West arrow (Blue) - 3D diamond shape */}
-          <Path
-            d={`M ${center} ${center} 
-                L ${center + 8} ${center + 8} 
-                L ${center - (innerRadius - 20)} ${center} 
-                L ${center + 8} ${center - 8} Z`}
-            fill="url(#blueGrad)"
-            stroke="#0d3352"
-            strokeWidth="1"
-            opacity="0.9"
-          />
-          
-          {/* Center circle with metallic effect */}
-          <Circle
-            cx={center}
-            cy={center}
-            r={size * 0.05}
-            fill="#4a4a4a"
-            stroke="#2a2a2a"
-            strokeWidth="1"
-          />
-          <Circle
-            cx={center}
-            cy={center}
-            r={size * 0.035}
-            fill="#6b6b6b"
-          />
-          <Circle
-            cx={center}
-            cy={center}
-            r={size * 0.02}
-            fill="#8a8a8a"
-          />
-          <Circle
-            cx={center}
-            cy={center}
-            r={size * 0.01}
-            fill="#a5a5a5"
-          />
-        </G>
-
-        {/* Element labels */}
+        {/* Element color ring segments */}
         {/* Water (North) */}
-        <SvgText
-          x={center}
-          y={center - radius + 30}
-          fontSize={size * 0.06}
-          fontWeight="700"
-          fill="#FFFFFF"
-          textAnchor="middle"
-        >
-          Water
-        </SvgText>
+        <Path d="M 200 35 A 165 165 0 0 1 365 200 L 345 200 A 145 145 0 0 0 200 55 Z" 
+              fill="url(#goldGrad)" opacity="0.15"/>
         
         {/* Fire (East) */}
-        <SvgText
-          x={center + radius - 30}
-          y={center}
-          fontSize={size * 0.06}
-          fontWeight="700"
-          fill="#FFFFFF"
-          textAnchor="middle"
-        >
-          Fire
-        </SvgText>
+        <Path d="M 365 200 A 165 165 0 0 1 200 365 L 200 345 A 145 145 0 0 0 345 200 Z" 
+              fill="url(#goldGrad)" opacity="0.2"/>
         
-        {/* Earth (South) - upside down */}
-        <SvgText
-          x={center}
-          y={center + radius - 20}
-          fontSize={size * 0.06}
-          fontWeight="700"
-          fill="#FFFFFF"
-          textAnchor="middle"
-          transform={`rotate(180 ${center} ${center + radius - 20})`}
-        >
-          Earth
-        </SvgText>
+        {/* Earth (South) */}
+        <Path d="M 200 365 A 165 165 0 0 1 35 200 L 55 200 A 145 145 0 0 0 200 345 Z" 
+              fill="url(#goldGrad)" opacity="0.25"/>
         
-        {/* Air (West) - upside down */}
-        <SvgText
-          x={center - radius + 30}
-          y={center}
-          fontSize={size * 0.06}
-          fontWeight="700"
-          fill="#FFFFFF"
-          textAnchor="middle"
-          transform={`rotate(180 ${center - radius + 30} ${center})`}
-        >
-          Air
-        </SvgText>
-
-        {/* Direction labels (N, E, S, W) */}
-        {CARDINAL_DIRECTIONS.map((dir, index) => {
-          const pos = getDirectionPosition(index * 2, true);
-          const isNorth = dir === 'N';
+        {/* Air (West) */}
+        <Path d="M 35 200 A 165 165 0 0 1 200 35 L 200 55 A 145 145 0 0 0 55 200 Z" 
+              fill="url(#goldGrad)" opacity="0.18"/>
+        
+        {/* Inner circle background */}
+        <Circle cx="200" cy="200" r="145" fill="url(#compassBg)"/>
+        
+        {/* Subtle inner rings */}
+        <Circle cx="200" cy="200" r="140" fill="none" stroke="#DAA520" strokeWidth="0.5" opacity="0.3"/>
+        <Circle cx="200" cy="200" r="130" fill="none" stroke="#DAA520" strokeWidth="0.5" opacity="0.2"/>
+        
+        {/* Crosshair lines */}
+        <Line x1="200" y1="70" x2="200" y2="330" stroke="#DAA520" strokeWidth="1" opacity="0.2"/>
+        <Line x1="70" y1="200" x2="330" y2="200" stroke="#DAA520" strokeWidth="1" opacity="0.2"/>
+        
+        {/* Degree markings */}
+        <G stroke="#B8860B" strokeWidth="1.5" opacity="0.6">
+          {/* Main cardinal marks */}
+          <Line x1="200" y1="55" x2="200" y2="70" strokeWidth="2"/>
+          <Line x1="330" y1="200" x2="345" y2="200" strokeWidth="2"/>
+          <Line x1="200" y1="330" x2="200" y2="345" strokeWidth="2"/>
+          <Line x1="55" y1="200" x2="70" y2="200" strokeWidth="2"/>
+        </G>
+        
+        <G stroke="#DAA520" strokeWidth="1" opacity="0.4">
+          {/* 45 degree marks */}
+          <Line x1="246" y1="76" x2="238" y2="84"/>
+          <Line x1="324" y1="154" x2="316" y2="162"/>
+          <Line x1="324" y1="246" x2="316" y2="238"/>
+          <Line x1="246" y1="324" x2="238" y2="316"/>
+          <Line x1="154" y1="324" x2="162" y2="316"/>
+          <Line x1="76" y1="246" x2="84" y2="238"/>
+          <Line x1="76" y1="154" x2="84" y2="162"/>
+          <Line x1="154" y1="76" x2="162" y2="84"/>
+        </G>
+        
+        {/* Element labels on outer ring */}
+        <SvgText x="200" y="25" fontFamily="Arial, sans-serif" fontSize="18" fontWeight="600" 
+                fill="#B8860B" textAnchor="middle" letterSpacing="2">WATER</SvgText>
+        
+        <SvgText x="375" y="207" fontFamily="Arial, sans-serif" fontSize="18" fontWeight="600" 
+                fill="#B8860B" textAnchor="middle" letterSpacing="2">FIRE</SvgText>
+        
+        <SvgText x="200" y="385" fontFamily="Arial, sans-serif" fontSize="18" fontWeight="600" 
+                fill="#B8860B" textAnchor="middle" letterSpacing="2">EARTH</SvgText>
+        
+        <SvgText x="25" y="207" fontFamily="Arial, sans-serif" fontSize="18" fontWeight="600" 
+                fill="#B8860B" textAnchor="middle" letterSpacing="2">AIR</SvgText>
+        
+        {/* Direction labels inside */}
+        {/* N */}
+        <SvgText x="200" y="100" fontFamily="Arial, sans-serif" fontSize="32" fontWeight="700" 
+                fill="#B8860B" textAnchor="middle">N</SvgText>
+        
+        {/* E */}
+        <SvgText x="300" y="207" fontFamily="Arial, sans-serif" fontSize="24" fontWeight="600" 
+                fill="#8B7355" textAnchor="middle">E</SvgText>
+        
+        {/* S */}
+        <SvgText x="200" y="310" fontFamily="Arial, sans-serif" fontSize="24" fontWeight="600" 
+                fill="#8B7355" textAnchor="middle">S</SvgText>
+        
+        {/* W */}
+        <SvgText x="100" y="207" fontFamily="Arial, sans-serif" fontSize="24" fontWeight="600" 
+                fill="#8B7355" textAnchor="middle">W</SvgText>
+        
+        {/* Intercardinal labels */}
+        <SvgText x="256" y="144" fontFamily="Arial, sans-serif" fontSize="16" fontWeight="500" 
+                fill="#9CA3AF" textAnchor="middle">NE</SvgText>
+        
+        <SvgText x="256" y="266" fontFamily="Arial, sans-serif" fontSize="16" fontWeight="500" 
+                fill="#9CA3AF" textAnchor="middle">SE</SvgText>
+        
+        <SvgText x="144" y="266" fontFamily="Arial, sans-serif" fontSize="16" fontWeight="500" 
+                fill="#9CA3AF" textAnchor="middle">SW</SvgText>
+        
+        <SvgText x="144" y="144" fontFamily="Arial, sans-serif" fontSize="16" fontWeight="500" 
+                fill="#9CA3AF" textAnchor="middle">NW</SvgText>
+        
+        {/* Compass needle */}
+        <G>
+          {/* North pointer (golden) */}
+          <Path d="M 200 200 L 192 208 L 200 95 L 208 208 Z" 
+                fill="url(#needleGrad)" stroke="#CC8800" strokeWidth="1"/>
           
-          return (
-            <SvgText
-              key={dir}
-              x={pos.x}
-              y={pos.y + 5}
-              fontSize={size * 0.07}
-              fontWeight="700"
-              fill={isNorth ? "#EF4444" : "#1E3A8A"}
-              textAnchor="middle"
-            >
-              {dir}
-            </SvgText>
-          );
-        })}
-
-        {/* Intermediate direction markers */}
-        {DIRECTIONS.filter(dir => !CARDINAL_DIRECTIONS.includes(dir)).map((dir, index) => {
-          const dirIndex = DIRECTIONS.indexOf(dir);
-          const pos = getDirectionPosition(dirIndex);
+          {/* South pointer (white) */}
+          <Path d="M 200 200 L 192 192 L 200 305 L 208 192 Z" 
+                fill="#FFFFFF" stroke="#D4AF37" strokeWidth="1" opacity="0.9"/>
           
-          return (
-            <SvgText
-              key={dir}
-              x={pos.x}
-              y={pos.y + 4}
-              fontSize={size * 0.04}
-              fontWeight="600"
-              fill="#374151"
-              textAnchor="middle"
-            >
-              {dir}
-            </SvgText>
-          );
-        })}
-
-        {/* Watermark text - AppliedVastu.com */}
-        {Array.from({ length: 8 }).map((_, i) => {
-          const angle = i * 45;
-          const watermark = createWatermarkPath(angle);
-          const rotation = angle - 90;
+          {/* East pointer (cream) */}
+          <Path d="M 200 200 L 192 192 L 305 200 L 192 208 Z" 
+                fill="#FFF8E7" stroke="#D4AF37" strokeWidth="1" opacity="0.7"/>
           
-          return (
-            <SvgText
-              key={i}
-              x={watermark.x}
-              y={watermark.y}
-              fontSize={size * 0.025}
-              fill="#D1D5DB"
-              textAnchor="middle"
-              transform={`rotate(${rotation} ${watermark.x} ${watermark.y})`}
-              opacity={0.4}
-            >
-              Vastu.com
-            </SvgText>
-          );
-        })}
-
-        {/* Center dot */}
-        <Circle
-          cx={center}
-          cy={center}
-          r={4}
-          fill="#374151"
-        />
+          {/* West pointer (cream) */}
+          <Path d="M 200 200 L 208 192 L 95 200 L 208 208 Z" 
+                fill="#FFF8E7" stroke="#D4AF37" strokeWidth="1" opacity="0.7"/>
+        </G>
+        
+        {/* Center pivot */}
+        <Circle cx="200" cy="200" r="18" fill="url(#goldGrad)"/>
+        <Circle cx="200" cy="200" r="16" fill="#FFFEF9"/>
+        <Circle cx="200" cy="200" r="12" fill="url(#goldGrad)"/>
+        <Circle cx="200" cy="200" r="10" fill="#FFA500"/>
+        <Circle cx="200" cy="200" r="6" fill="#FFD600"/>
+        <Circle cx="198" cy="198" r="2" fill="#FFFEF9" opacity="0.8"/>
       </Svg>
     </View>
   );

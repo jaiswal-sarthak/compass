@@ -129,9 +129,26 @@ export default function CompassView({
   const [webPermissionGranted, setWebPermissionGranted] = useState(false);
   const [showCalibration, setShowCalibration] = useState(true);
 
-  // Filters for smooth readings
-  const headingFilter = useRef(new LowPassFilter(0.15));
+  // Filters for smooth readings - more aggressive smoothing for stability
+  const headingFilter = useRef(new LowPassFilter(0.08)); // Reduced from 0.15 for more stability
   const deviceInfo = useRef(getDeviceInfo());
+  
+  // Stability tracking
+  const lastHeadingUpdate = useRef(0);
+  const lastStableHeading = useRef(null);
+  const stabilityTimer = useRef(null);
+  const isStable = useRef(false); // Track if device has been stable for required time
+  const lastAccelData = useRef({ x: 0, y: 0, z: 0, timestamp: 0 });
+  const lastOrientationData = useRef({ beta: 0, gamma: 0, timestamp: 0 });
+  const isDeviceMoving = useRef(false);
+  const accelData = useRef({ x: 0, y: 0, z: 0 }); // Accelerometer data for tilt compensation
+  
+  // Configuration - improved for stability
+  const DEAD_ZONE_THRESHOLD = 1.5; // Degrees - increased from 0.5 for more stability
+  const STABILITY_TIME = 2000; // ms - time device must be stable before freezing
+  const MOVEMENT_THRESHOLD = 0.15; // m/s² - increased threshold for movement detection
+  const HIGH_CONFIDENCE_THRESHOLD = 0.8; // Confidence level considered "high"
+  const MIN_UPDATE_INTERVAL = 100; // ms - minimum time between updates
   
   const MIN_SIZE = COMPASS_SIZE * 1.0;
   const MAX_SIZE = COMPASS_SIZE * 1.3;
@@ -158,49 +175,135 @@ export default function CompassView({
     }
   }, []);
 
-  // Universal compass heading calculation that works across ALL devices
-  const calculateHeading = (mx, my, mz = 0) => {
+  // Check if heading should be updated based on movement, confidence, and dead zone
+  const shouldUpdateHeading = (newHeading, confidence, timestamp) => {
+    // If no previous heading, always update
+    if (lastStableHeading.current === null) {
+      return true;
+    }
+    
+    // Enforce minimum update interval
+    const timeSinceLastUpdate = timestamp - lastHeadingUpdate.current;
+    if (timeSinceLastUpdate < MIN_UPDATE_INTERVAL) {
+      return false; // Too soon since last update
+    }
+    
+    // Calculate angular difference (handling wraparound)
+    let diff = Math.abs(newHeading - lastStableHeading.current);
+    if (diff > 180) diff = 360 - diff;
+    
+    // If confidence is low, be more lenient with updates
+    const effectiveThreshold = confidence && confidence < HIGH_CONFIDENCE_THRESHOLD 
+      ? DEAD_ZONE_THRESHOLD * 0.7  // Slightly lower threshold when confidence is low
+      : DEAD_ZONE_THRESHOLD;
+    
+    // If change is below dead zone threshold, check if device is moving
+    if (diff < effectiveThreshold) {
+      // Device appears stationary - check if we should freeze updates
+      if (confidence && confidence >= HIGH_CONFIDENCE_THRESHOLD && !isDeviceMoving.current) {
+        // High confidence + no movement + small change = prepare to freeze updates
+        // Clear any existing stability timer
+        if (stabilityTimer.current) {
+          clearTimeout(stabilityTimer.current);
+        }
+        
+        // Set timer to mark device as stable after stability period
+        stabilityTimer.current = setTimeout(() => {
+          isStable.current = true; // Device has been stable - freeze updates
+        }, STABILITY_TIME);
+        
+        // If already stable, don't update unless movement detected
+        if (isStable.current) {
+          return false; // Don't update - device is stable
+        }
+        
+        // Not yet stable, but preparing - be more restrictive
+        return diff >= effectiveThreshold * 0.5; // Increased from 0.2
+      }
+      
+      // Low confidence or device moving - allow small updates but still filter
+      return diff >= effectiveThreshold * 0.5; // Increased from 0.3
+    }
+    
+    // Significant change detected - clear stability state and timer
+    isStable.current = false;
+    if (stabilityTimer.current) {
+      clearTimeout(stabilityTimer.current);
+      stabilityTimer.current = null;
+    }
+    
+    return true;
+  };
+  
+  // Universal compass heading calculation using device magnetometer with tilt compensation
+  // This properly uses the device's magnetometer to get accurate heading
+  const calculateHeading = (mx, my, mz = 0, ax = 0, ay = 0, az = 0) => {
     // Normalize magnetometer readings
-    const magnitude = Math.sqrt(mx * mx + my * my + mz * mz);
-    if (magnitude < 0.01) return 0; // Invalid reading
+    const magMagnitude = Math.sqrt(mx * mx + my * my + mz * mz);
+    if (magMagnitude < 0.01) {
+      return lastStableHeading.current || 0; // Return last known heading if invalid
+    }
     
-    // Normalized values
-    const nx = mx / magnitude;
-    const ny = my / magnitude;
+    // Device coordinate system (Android/iOS standard):
+    // - X-axis: points to the right edge of device (East)
+    // - Y-axis: points to the top edge of device (North when device points North)
+    // - Z-axis: points out of screen (upward)
     
+    // Calculate device tilt using accelerometer (if available)
+    const accelMagnitude = Math.sqrt(ax * ax + ay * ay + az * az);
     let heading;
     
-    // Device-specific calculations
-    if (deviceInfo.current.isPixel) {
-      // Google Pixel devices have INVERTED Y-axis
-      // They need opposite formula
-      heading = Math.atan2(-nx, -ny) * (180 / Math.PI);
+    if (accelMagnitude > 0.1) {
+      // Device is tilted - use tilt compensation
+      // Normalize accelerometer to get gravity vector
+      const gx = ax / accelMagnitude;
+      const gy = ay / accelMagnitude;
+      const gz = az / accelMagnitude;
       
-      // Additional 90° correction for Pixel orientation
-      heading = (heading + 90) % 360;
+      // Calculate tilt angles
+      const pitch = Math.asin(-gx); // Rotation around X-axis
+      const cosPitch = Math.cos(pitch);
+      
+      // Calculate roll (rotation around Y-axis)
+      let roll;
+      if (Math.abs(cosPitch) > 0.001) {
+        roll = Math.asin(gy / cosPitch);
+      } else {
+        roll = 0; // Avoid division by zero
+      }
+      
+      // Rotate magnetometer readings to compensate for tilt
+      // This projects the magnetic field onto the horizontal plane
+      const sinPitch = Math.sin(pitch);
+      const cosRoll = Math.cos(roll);
+      const sinRoll = Math.sin(roll);
+      
+      // Rotate magnetometer vector to horizontal plane
+      const hx = mx * cosPitch + mz * sinPitch;
+      const hy = mx * sinRoll * sinPitch + my * cosRoll - mz * sinRoll * cosPitch;
+      
+      // Calculate heading from horizontal components
+      // Standard formula: atan2(hx, hy) gives angle from North (Y-axis)
+      // If result is inverted (60° instead of 300°), we need to invert
+      // 300° = 360° - 60°, so try: 360 - atan2(hx, hy)
+      let rawHeading = Math.atan2(hx, hy) * (180 / Math.PI);
+      // Invert if needed: if showing 60° but should be 300°
+      heading = (360 - rawHeading) % 360;
     } else {
-      // Standard formula for iOS, Samsung, and other Android devices
-      // When phone is flat on table, screen facing up:
-      // - X-axis points to the right edge
-      // - Y-axis points to the top edge (towards front camera)
-      // - Z-axis points up (out of screen)
-      heading = Math.atan2(nx, ny) * (180 / Math.PI);
+      // Device is flat - use simple 2D calculation
+      // Standard formula: atan2(mx, my) gives angle from North (Y-axis)
+      // If showing 60° but should be 300° (240° off), try inverting
+      // 300° = 360° - 60°, so invert the result
+      let rawHeading = Math.atan2(mx, my) * (180 / Math.PI);
+      // Invert: 360 - rawHeading to fix the 240° offset
+      heading = (360 - rawHeading) % 360;
     }
     
-    // Normalize to 0-360
+    // Normalize to 0-360 (North = 0°, East = 90°, South = 180°, West = 270°)
     heading = (heading + 360) % 360;
     
-    // Apply low-pass filter for smoothness (more aggressive for Pixel)
-    if (deviceInfo.current.isPixel) {
-      // Increase smoothing for Pixel to reduce jitter
-      const pixelFilter = new LowPassFilter(0.08); // More aggressive smoothing
-      if (!headingFilter.current.pixelFilter) {
-        headingFilter.current.pixelFilter = pixelFilter;
-      }
-      heading = headingFilter.current.pixelFilter.filter(heading);
-    } else {
-      heading = headingFilter.current.filter(heading);
-    }
+    // Apply low-pass filter for smoothness
+    heading = headingFilter.current.filter(heading);
     
     return heading;
   };
@@ -271,12 +374,50 @@ export default function CompassView({
 
       const handleOrientation = (event) => {
         let angle = null;
+        let confidence = null;
         const device = deviceInfo.current;
+        const now = Date.now();
+        
+        // Detect movement using orientation change (beta/gamma)
+        if (event.beta !== null && event.beta !== undefined && 
+            event.gamma !== null && event.gamma !== undefined) {
+          const lastOri = lastOrientationData.current;
+          const timeDelta = (now - lastOri.timestamp) / 1000; // seconds
+          
+          if (timeDelta > 0 && lastOri.timestamp > 0) {
+            // Calculate change in orientation
+            const betaDelta = Math.abs(event.beta - lastOri.beta);
+            const gammaDelta = Math.abs(event.gamma - lastOri.gamma);
+            const orientationChange = Math.sqrt(betaDelta * betaDelta + gammaDelta * gammaDelta);
+            
+            // Update movement status (threshold in degrees per second)
+            const changeRate = orientationChange / timeDelta;
+            isDeviceMoving.current = changeRate > 2.0; // 2 degrees/second threshold
+            
+            // If device starts moving, clear stability state
+            if (isDeviceMoving.current) {
+              isStable.current = false;
+              if (stabilityTimer.current) {
+                clearTimeout(stabilityTimer.current);
+                stabilityTimer.current = null;
+              }
+            }
+          }
+          
+          lastOrientationData.current = {
+            beta: event.beta,
+            gamma: event.gamma,
+            timestamp: now
+          };
+        }
 
         // Priority 1: iOS webkitCompassHeading (most accurate and universal)
         if (event.webkitCompassHeading !== undefined && event.webkitCompassHeading !== null) {
           // This is already correctly calibrated for iOS
           angle = event.webkitCompassHeading;
+          // iOS provides confidence (0-1, higher is better)
+          confidence = event.webkitCompassAccuracy !== undefined ? 
+            Math.max(0, 1 - (event.webkitCompassAccuracy / 180)) : 0.9; // Convert accuracy to confidence
         }
         // Priority 2: Absolute orientation (more reliable)
         else if (event.absolute === true && event.alpha !== null && event.alpha !== undefined) {
@@ -284,12 +425,14 @@ export default function CompassView({
           // alpha: 0° when device points North, increases counterclockwise
           // Convert to standard compass (clockwise from North)
           angle = 360 - event.alpha;
+          confidence = 0.8; // Absolute orientation is generally reliable
         }
         // Priority 3: Standard alpha (relative orientation)
         else if (event.alpha !== null && event.alpha !== undefined) {
           // Standard alpha - may be relative to initial position
           // Still use same conversion
           angle = 360 - event.alpha;
+          confidence = 0.6; // Relative orientation is less reliable
         }
 
         if (angle !== null) {
@@ -309,27 +452,35 @@ export default function CompassView({
             // No adjustment needed
           }
           
-          // Apply smoothing (more aggressive for Pixel)
+          // Apply smoothing (more aggressive for all devices)
           let smoothed;
           if (device.isPixel) {
             // Extra smoothing for Pixel to prevent jitter
             if (!headingFilter.current.pixelFilter) {
-              headingFilter.current.pixelFilter = new LowPassFilter(0.08);
+              headingFilter.current.pixelFilter = new LowPassFilter(0.06);
             }
             smoothed = headingFilter.current.pixelFilter.filter(angle);
           } else {
             smoothed = headingFilter.current.filter(angle);
           }
           
-          setHeading(smoothed);
-          rotation.value = withSpring(-smoothed, { 
-            damping: device.isPixel ? 30 : 25,  // More damping for Pixel
-            stiffness: device.isPixel ? 70 : 80, // Less stiffness for Pixel
-            mass: 0.5 
-          });
+          // Check if device is moving and if update is needed
+          const shouldUpdate = shouldUpdateHeading(smoothed, confidence, now);
           
-          if (onHeadingChange) {
-            onHeadingChange(smoothed);
+          if (shouldUpdate) {
+            setHeading(smoothed);
+            rotation.value = withSpring(-smoothed, { 
+              damping: device.isPixel ? 40 : 35,  // Increased damping for more stability
+              stiffness: device.isPixel ? 60 : 70, // Reduced stiffness for smoother motion
+              mass: 0.8  // Increased mass for more inertia
+            });
+            
+            if (onHeadingChange) {
+              onHeadingChange(smoothed);
+            }
+            
+            lastHeadingUpdate.current = now;
+            lastStableHeading.current = smoothed;
           }
         }
       };
@@ -355,6 +506,57 @@ export default function CompassView({
       };
     }
 
+    // NATIVE: Accelerometer for movement detection
+    let accelerometerSubscription = null;
+    
+    const startAccelerometer = async () => {
+      try {
+        const isAvailable = await Accelerometer.isAvailableAsync();
+        if (isAvailable) {
+          Accelerometer.setUpdateInterval(100); // Match magnetometer rate for synchronized tilt compensation
+          
+           accelerometerSubscription = Accelerometer.addListener((data) => {
+             const { x, y, z } = data;
+             const now = Date.now();
+             
+             // Update accelerometer data for tilt compensation (REQUIRED for accurate compass)
+             accelData.current.x = x;
+             accelData.current.y = y;
+             accelData.current.z = z;
+             
+             // Calculate acceleration magnitude
+             const accel = Math.sqrt(x * x + y * y + z * z);
+             
+             // Calculate change in acceleration (jerk) to detect movement
+             const lastAccel = lastAccelData.current;
+             const timeDelta = (now - lastAccel.timestamp) / 1000; // seconds
+             const accelDelta = Math.abs(accel - Math.sqrt(
+               lastAccel.x * lastAccel.x + 
+               lastAccel.y * lastAccel.y + 
+               lastAccel.z * lastAccel.z
+             ));
+             
+             // Update movement status
+             isDeviceMoving.current = accelDelta > MOVEMENT_THRESHOLD || 
+               Math.abs(accel - 9.81) > 0.5; // Significant deviation from gravity
+             
+             lastAccelData.current = { x, y, z, timestamp: now };
+             
+             // If device starts moving, clear stability state
+             if (isDeviceMoving.current) {
+               isStable.current = false;
+               if (stabilityTimer.current) {
+                 clearTimeout(stabilityTimer.current);
+                 stabilityTimer.current = null;
+               }
+             }
+           });
+        }
+      } catch (error) {
+        console.log('Accelerometer not available:', error);
+      }
+    };
+    
     // NATIVE: Magnetometer
     let magnetometerSubscription = null;
 
@@ -366,25 +568,38 @@ export default function CompassView({
           return;
         }
 
-        // Set update interval (slower for Pixel to reduce jitter)
-        const updateInterval = deviceInfo.current.isPixel ? 150 : 100; // 6.6 Hz for Pixel, 10 Hz for others
+        // Set update interval (slower for stability)
+        const updateInterval = deviceInfo.current.isPixel ? 200 : 150; // Slower updates for more stability
         Magnetometer.setUpdateInterval(updateInterval);
 
         magnetometerSubscription = Magnetometer.addListener((data) => {
           const { x, y, z } = data;
           
-          // Calculate heading with all axes for better accuracy
-          const angle = calculateHeading(x, y, z);
+          // Use magnetometer with tilt compensation from accelerometer
+          // This is the CORRECT way to use device magnetometer - passes accelerometer data
+          const angle = calculateHeading(x, y, z, accelData.current.x, accelData.current.y, accelData.current.z);
           
-          setHeading(angle);
-          rotation.value = withSpring(-angle, { 
-            damping: 25, 
-            stiffness: 80,
-            mass: 0.5 
-          });
+          // For native, we assume high confidence if magnitude is reasonable
+          const magnitude = Math.sqrt(x * x + y * y + z * z);
+          const confidence = magnitude > 20 && magnitude < 100 ? 0.9 : 0.6; // Reasonable magnetic field strength
           
-          if (onHeadingChange) {
-            onHeadingChange(angle);
+          const now = Date.now();
+          const shouldUpdate = shouldUpdateHeading(angle, confidence, now);
+          
+          if (shouldUpdate) {
+            setHeading(angle);
+            rotation.value = withSpring(-angle, { 
+              damping: 35,  // Increased damping for more stability
+              stiffness: 70, // Reduced stiffness for smoother motion
+              mass: 0.8  // Increased mass for more inertia
+            });
+            
+            if (onHeadingChange) {
+              onHeadingChange(angle);
+            }
+            
+            lastHeadingUpdate.current = now;
+            lastStableHeading.current = angle;
           }
         });
       } catch (error) {
@@ -392,11 +607,21 @@ export default function CompassView({
       }
     };
 
+    // Start both sensors for native
+    if (Platform.OS !== 'web') {
+      startAccelerometer();
+    }
     startMagnetometer();
 
     return () => {
       if (magnetometerSubscription) {
         magnetometerSubscription.remove();
+      }
+      if (accelerometerSubscription) {
+        accelerometerSubscription.remove();
+      }
+      if (stabilityTimer.current) {
+        clearTimeout(stabilityTimer.current);
       }
     };
   }, [initialRotationComplete, webPermissionGranted, onHeadingChange]);

@@ -8,114 +8,120 @@
  * Col 0 = West (left)
  * Col 8 = East (right)
  */
+// Premium Golden/Yellow Color Palette
+// Divine/Very Positive: Rich Gold, Deep Gold
+// Positive: Golden Yellow, Amber, Light Gold
+// Neutral: Mellow Yellow, Cream, Champagne, Butter
+// Negative: Mustard, Honey (still in golden family but muted)
+
 export const VASTU_GRID_9X9 = [
   // Row 0 (North - top row)
   [
-    { devta: 'Vayu', zone: 'NW', energy: 'positive', color: '#87CEEB' },
-    { devta: 'Naag', zone: 'NNW', energy: 'neutral', color: '#A0522D' },
-    { devta: 'Mukhya', zone: 'NNW', energy: 'neutral', color: '#A0522D' },
-    { devta: 'Bhallat', zone: 'N', energy: 'neutral', color: '#CD853F' },
-    { devta: 'Som', zone: 'N', energy: 'positive', color: '#DEB887' },
-    { devta: 'Charak', zone: 'N', energy: 'neutral', color: '#CD853F' },
-    { devta: 'Aditi', zone: 'NNE', energy: 'very positive', color: '#4169E1' },
-    { devta: 'Uditi', zone: 'NNE', energy: 'positive', color: '#4682B4' },
-    { devta: 'Isha', zone: 'NE', energy: 'very positive', color: '#4169E1' },
+    { devta: 'Vayu', zone: 'NW', energy: 'positive', color: '#FFC125' }, // Golden Yellow
+    { devta: 'Naag', zone: 'NNW', energy: 'neutral', color: '#F0E68C' }, // Khaki (pastel)
+    { devta: 'Mukhya', zone: 'NNW', energy: 'neutral', color: '#F0E68C' }, // Khaki (pastel)
+    { devta: 'Bhallat', zone: 'N', energy: 'neutral', color: '#FFF8DC' }, // Cornsilk (pastel)
+    { devta: 'Som', zone: 'N', energy: 'positive', color: '#FFD700' }, // Gold
+    { devta: 'Charak', zone: 'N', energy: 'neutral', color: '#FFF8DC' }, // Cornsilk (pastel)
+    { devta: 'Aditi', zone: 'NNE', energy: 'very positive', color: '#FFE87C' }, // Light Gold (lighter)
+    { devta: 'Uditi', zone: 'NNE', energy: 'positive', color: '#FFC125' }, // Golden Yellow
+    { devta: 'Isha', zone: 'NE', energy: 'very positive', color: '#FFE87C' }, // Light Gold (lighter)
   ],
   // Row 1
   [
-    { devta: 'Rog', zone: 'NW', energy: 'negative', color: '#8B4513' },
-    { devta: 'Rudrajay', zone: 'NW', energy: 'neutral', color: '#A0522D' }, // Merged 2 rows
+    { devta: 'Rog', zone: 'NW', energy: 'negative', color: '#F0A500' }, // Honey Gold
+    { devta: 'Rudrajay', zone: 'NW', energy: 'neutral', color: '#FFE87C' }, // Light Gold
     { devta: null, zone: null, energy: null, color: null }, // Empty cell
-    { devta: 'Bhoodhar', zone: 'N', energy: 'positive', color: '#87CEEB' }, // Merged 3x3
-    { devta: 'Bhoodhar', zone: 'N', energy: 'positive', color: '#87CEEB' },
-    { devta: 'Bhoodhar', zone: 'N', energy: 'positive', color: '#87CEEB' },
-    { devta: 'Aap', zone: 'NNE', energy: 'very positive', color: '#4169E1' }, // Merged 2 cols
-    { devta: 'Aap', zone: 'NNE', energy: 'very positive', color: '#4169E1' },
-    { devta: 'Parjanya', zone: 'ENE', energy: 'positive', color: '#90EE90' },
+    { devta: 'Bhoodhar', zone: 'N', energy: 'positive', color: '#FFC125' }, // Merged 3x3 - Golden Yellow
+    { devta: 'Bhoodhar', zone: 'N', energy: 'positive', color: '#FFC125' },
+    { devta: 'Bhoodhar', zone: 'N', energy: 'positive', color: '#FFC125' },
+    { devta: 'Aap', zone: 'NNE', energy: 'very positive', color: '#FFE87C' }, // Merged 2 cols - Light Gold (lighter)
+    { devta: 'Aap', zone: 'NNE', energy: 'very positive', color: '#FFE87C' },
+    { devta: 'Parjanya', zone: 'ENE', energy: 'positive', color: '#FFC125' }, // Golden Yellow
   ],
   // Row 2
   [
-    { devta: 'Sosh', zone: 'WNW', energy: 'negative', color: '#A0522D' },
-    { devta: 'Rudrajay', zone: 'NW', energy: 'neutral', color: '#A0522D' }, // Merged continues
-    { devta: 'Rudra', zone: 'NNW', energy: 'neutral', color: '#A0522D' },
-    { devta: 'Bhoodhar', zone: 'N', energy: 'positive', color: '#87CEEB' }, // Merged continues
-    { devta: 'Bhoodhar', zone: 'N', energy: 'positive', color: '#87CEEB' },
-    { devta: 'Bhoodhar', zone: 'N', energy: 'positive', color: '#87CEEB' },
-    { devta: 'Aapvatsa', zone: 'NNE', energy: 'positive', color: '#4682B4' }, // Merged 2 cols
-    { devta: 'Aapvatsa', zone: 'NNE', energy: 'positive', color: '#4682B4' },
-    { devta: 'Jayant', zone: 'E', energy: 'positive', color: '#90EE90' },
+    { devta: 'Sosh', zone: 'WNW', energy: 'negative', color: '#F0A500' }, // Honey Gold
+    { devta: 'Rudrajay', zone: 'NW', energy: 'neutral', color: '#FFE87C' }, // Merged continues - Light Gold
+    { devta: 'Rudra', zone: 'NNW', energy: 'neutral', color: '#F0E68C' }, // Khaki (pastel)
+    { devta: 'Bhoodhar', zone: 'N', energy: 'positive', color: '#FFC125' }, // Merged continues - Golden Yellow
+    { devta: 'Bhoodhar', zone: 'N', energy: 'positive', color: '#FFC125' },
+    { devta: 'Bhoodhar', zone: 'N', energy: 'positive', color: '#FFC125' },
+    { devta: 'Aapvatsa', zone: 'NNE', energy: 'positive', color: '#FFC125' }, // Merged 2 cols - Golden Yellow
+    { devta: 'Aapvatsa', zone: 'NNE', energy: 'positive', color: '#FFC125' },
+    { devta: 'Jayant', zone: 'E', energy: 'positive', color: '#FFC125' }, // Golden Yellow
   ],
   // Row 3
   [
-    { devta: 'Asur', zone: 'WNW', energy: 'negative', color: '#A0522D' },
-    { devta: 'Mitra', zone: 'W', energy: 'positive', color: '#DEB887' }, // Merged 3x2
-    { devta: 'Mitra', zone: 'W', energy: 'positive', color: '#DEB887' },
-    { devta: 'Brahma', zone: 'BRAHMASTHAN', energy: 'divine', color: '#FFA500' }, // Merged 3x3
-    { devta: 'Brahma', zone: 'BRAHMASTHAN', energy: 'divine', color: '#FFA500' },
-    { devta: 'Brahma', zone: 'BRAHMASTHAN', energy: 'divine', color: '#FFA500' },
-    { devta: 'Aryama', zone: 'E', energy: 'positive', color: '#DEB887' }, // Merged 3x2
-    { devta: 'Aryama', zone: 'E', energy: 'positive', color: '#DEB887' },
-    { devta: 'Mahendra', zone: 'E', energy: 'very positive', color: '#FFD700' },
+    { devta: 'Asur', zone: 'WNW', energy: 'negative', color: '#F0A500' }, // Honey Gold
+    { devta: 'Mitra', zone: 'W', energy: 'positive', color: '#FFD700' }, // Merged 3x2 - Gold
+    { devta: 'Mitra', zone: 'W', energy: 'positive', color: '#FFD700' },
+    { devta: 'Brahma', zone: 'BRAHMASTHAN', energy: 'divine', color: '#FFD700' }, // Merged 3x3 - Pure Gold
+    { devta: 'Brahma', zone: 'BRAHMASTHAN', energy: 'divine', color: '#FFD700' },
+    { devta: 'Brahma', zone: 'BRAHMASTHAN', energy: 'divine', color: '#FFD700' },
+    { devta: 'Aryama', zone: 'E', energy: 'positive', color: '#FFD700' }, // Merged 3x2 - Gold
+    { devta: 'Aryama', zone: 'E', energy: 'positive', color: '#FFD700' },
+    { devta: 'Mahendra', zone: 'E', energy: 'very positive', color: '#FFE87C' }, // Light Gold (lighter)
   ],
   // Row 4
   [
-    { devta: 'Varun', zone: 'W', energy: 'neutral', color: '#CD853F' },
-    { devta: 'Mitra', zone: 'W', energy: 'positive', color: '#DEB887' }, // Merged continues
-    { devta: 'Mitra', zone: 'W', energy: 'positive', color: '#DEB887' },
-    { devta: 'Brahma', zone: 'BRAHMASTHAN', energy: 'divine', color: '#FFA500' }, // Merged continues
-    { devta: 'Brahma', zone: 'BRAHMASTHAN', energy: 'divine', color: '#FFA500' },
-    { devta: 'Brahma', zone: 'BRAHMASTHAN', energy: 'divine', color: '#FFA500' },
-    { devta: 'Aryama', zone: 'E', energy: 'positive', color: '#DEB887' }, // Merged continues
-    { devta: 'Aryama', zone: 'E', energy: 'positive', color: '#DEB887' },
-    { devta: 'Aditya', zone: 'E', energy: 'positive', color: '#90EE90' },
+    { devta: 'Varun', zone: 'W', energy: 'neutral', color: '#F7E7CE' }, // Champagne (pastel)
+    { devta: 'Mitra', zone: 'W', energy: 'positive', color: '#FFD700' }, // Merged continues - Gold
+    { devta: 'Mitra', zone: 'W', energy: 'positive', color: '#FFD700' },
+    { devta: 'Brahma', zone: 'BRAHMASTHAN', energy: 'divine', color: '#FFD700' }, // Merged continues - Pure Gold
+    { devta: 'Brahma', zone: 'BRAHMASTHAN', energy: 'divine', color: '#FFD700' },
+    { devta: 'Brahma', zone: 'BRAHMASTHAN', energy: 'divine', color: '#FFD700' },
+    { devta: 'Aryama', zone: 'E', energy: 'positive', color: '#FFD700' }, // Merged continues - Gold
+    { devta: 'Aryama', zone: 'E', energy: 'positive', color: '#FFD700' },
+    { devta: 'Aditya', zone: 'E', energy: 'positive', color: '#FFC125' }, // Golden Yellow
   ],
   // Row 5
   [
-    { devta: 'Pushpdant', zone: 'W', energy: 'positive', color: '#DEB887' },
-    { devta: 'Mitra', zone: 'W', energy: 'positive', color: '#DEB887' }, // Merged continues
-    { devta: 'Mitra', zone: 'W', energy: 'positive', color: '#DEB887' },
-    { devta: 'Brahma', zone: 'BRAHMASTHAN', energy: 'divine', color: '#FFA500' }, // Merged continues
-    { devta: 'Brahma', zone: 'BRAHMASTHAN', energy: 'divine', color: '#FFA500' },
-    { devta: 'Brahma', zone: 'BRAHMASTHAN', energy: 'divine', color: '#FFA500' },
-    { devta: 'Aryama', zone: 'E', energy: 'positive', color: '#DEB887' }, // Merged continues
-    { devta: 'Aryama', zone: 'E', energy: 'positive', color: '#DEB887' },
-    { devta: 'Satyak', zone: 'ESE', energy: 'positive', color: '#90EE90' },
+    { devta: 'Pushpdant', zone: 'W', energy: 'positive', color: '#FFD700' }, // Gold
+    { devta: 'Mitra', zone: 'W', energy: 'positive', color: '#FFD700' }, // Merged continues - Gold
+    { devta: 'Mitra', zone: 'W', energy: 'positive', color: '#FFD700' },
+    { devta: 'Brahma', zone: 'BRAHMASTHAN', energy: 'divine', color: '#FFD700' }, // Merged continues - Pure Gold
+    { devta: 'Brahma', zone: 'BRAHMASTHAN', energy: 'divine', color: '#FFD700' },
+    { devta: 'Brahma', zone: 'BRAHMASTHAN', energy: 'divine', color: '#FFD700' },
+    { devta: 'Aryama', zone: 'E', energy: 'positive', color: '#FFD700' }, // Merged continues - Gold
+    { devta: 'Aryama', zone: 'E', energy: 'positive', color: '#FFD700' },
+    { devta: 'Satyak', zone: 'ESE', energy: 'positive', color: '#FFC125' }, // Golden Yellow
   ],
   // Row 6
   [
-    { devta: 'Sugreev', zone: 'WSW', energy: 'neutral', color: '#CD853F' },
-    { devta: 'Indraraj', zone: 'W', energy: 'positive', color: '#DEB887' }, // Merged 2 cols
-    { devta: 'Indraraj', zone: 'W', energy: 'positive', color: '#DEB887' },
-    { devta: 'Vivasvan', zone: 'S', energy: 'positive', color: '#F4A460' }, // Merged 3x2
-    { devta: 'Vivasvan', zone: 'S', energy: 'positive', color: '#F4A460' },
-    { devta: 'Vivasvan', zone: 'S', energy: 'positive', color: '#F4A460' },
-    { devta: 'Svitra', zone: 'SSE', energy: 'positive', color: '#FFD700' }, // Merged 2 cols
+    { devta: 'Sugreev', zone: 'WSW', energy: 'neutral', color: '#F7E7CE' }, // Champagne (pastel)
+    { devta: 'Indraraj', zone: 'W', energy: 'positive', color: '#FFD700' }, // Merged 2 cols - Gold
+    { devta: 'Indraraj', zone: 'W', energy: 'positive', color: '#FFD700' },
+    { devta: 'Vivasvan', zone: 'S', energy: 'positive', color: '#FFBF00' }, // Merged 3x2 - Amber
+    { devta: 'Vivasvan', zone: 'S', energy: 'positive', color: '#FFBF00' },
+    { devta: 'Vivasvan', zone: 'S', energy: 'positive', color: '#FFBF00' },
+    { devta: 'Svitra', zone: 'SSE', energy: 'positive', color: '#FFD700' }, // Merged 2 cols - Gold
     { devta: 'Svitra', zone: 'SSE', energy: 'positive', color: '#FFD700' },
-    { devta: 'Bhusha', zone: 'SE', energy: 'neutral', color: '#FFD700' },
+    { devta: 'Bhusha', zone: 'SE', energy: 'neutral', color: '#FFE87C' }, // Light Gold
   ],
   // Row 7
   [
-    { devta: 'Dauwarik', zone: 'WSW', energy: 'neutral', color: '#A0522D' },
-    { devta: 'Indra', zone: 'SW', energy: 'neutral', color: '#A0522D' }, // Merged 2 cols
-    { devta: 'Indra', zone: 'SW', energy: 'neutral', color: '#A0522D' },
-    { devta: 'Vivasvan', zone: 'S', energy: 'positive', color: '#F4A460' }, // Merged continues
-    { devta: 'Vivasvan', zone: 'S', energy: 'positive', color: '#F4A460' },
-    { devta: 'Vivasvan', zone: 'S', energy: 'positive', color: '#F4A460' },
-    { devta: 'Savitra', zone: 'SSE', energy: 'positive', color: '#FFA500' }, // Merged 2 cols
-    { devta: 'Savitra', zone: 'SSE', energy: 'positive', color: '#FFA500' },
-    { devta: 'Antrix', zone: 'SE', energy: 'neutral', color: '#FFD700' },
+    { devta: 'Dauwarik', zone: 'WSW', energy: 'neutral', color: '#FFE87C' }, // Light Gold
+    { devta: 'Indra', zone: 'SW', energy: 'neutral', color: '#FFE87C' }, // Merged 2 cols - Light Gold
+    { devta: 'Indra', zone: 'SW', energy: 'neutral', color: '#FFE87C' },
+    { devta: 'Vivasvan', zone: 'S', energy: 'positive', color: '#FFBF00' }, // Merged continues - Amber
+    { devta: 'Vivasvan', zone: 'S', energy: 'positive', color: '#FFBF00' },
+    { devta: 'Vivasvan', zone: 'S', energy: 'positive', color: '#FFBF00' },
+    { devta: 'Savitra', zone: 'SSE', energy: 'positive', color: '#FFC125' }, // Merged 2 cols - Golden Yellow
+    { devta: 'Savitra', zone: 'SSE', energy: 'positive', color: '#FFC125' },
+    { devta: 'Antrix', zone: 'SE', energy: 'neutral', color: '#FFE87C' }, // Light Gold
   ],
   // Row 8 (South - bottom row)
   [
-    { devta: 'Pitru', zone: 'SW', energy: 'negative', color: '#8B4513' },
-    { devta: 'Mrig', zone: 'SSW', energy: 'neutral', color: '#A0522D' },
-    { devta: 'Bhujang', zone: 'SSW', energy: 'negative', color: '#A0522D' },
-    { devta: 'Gandharva', zone: 'S', energy: 'neutral', color: '#CD853F' },
-    { devta: 'Yama', zone: 'S', energy: 'negative', color: '#A0522D' },
-    { devta: 'Gkhawat', zone: 'S', energy: 'neutral', color: '#CD853F' },
-    { devta: 'Vitath', zone: 'SSE', energy: 'neutral', color: '#FFA500' },
-    { devta: 'Pusha', zone: 'SSE', energy: 'positive', color: '#FFA500' },
-    { devta: 'Agni', zone: 'SE', energy: 'positive', color: '#FFD700' },
+    { devta: 'Pitru', zone: 'SW', energy: 'negative', color: '#F0A500' }, // Honey Gold
+    { devta: 'Mrig', zone: 'SSW', energy: 'neutral', color: '#FFE87C' }, // Light Gold
+    { devta: 'Bhujang', zone: 'SSW', energy: 'negative', color: '#F0A500' }, // Honey Gold
+    { devta: 'Gandharva', zone: 'S', energy: 'neutral', color: '#FFF8DC' }, // Cornsilk (pastel)
+    { devta: 'Yama', zone: 'S', energy: 'negative', color: '#FFDB58' }, // Mustard (pastel)
+    { devta: 'Gkhawat', zone: 'S', energy: 'neutral', color: '#FFF8DC' }, // Cornsilk (pastel)
+    { devta: 'Vitath', zone: 'SSE', energy: 'neutral', color: '#FFC125' }, // Golden Yellow
+    { devta: 'Pusha', zone: 'SSE', energy: 'positive', color: '#FFC125' }, // Golden Yellow
+    { devta: 'Agni', zone: 'SE', energy: 'positive', color: '#FFD700' }, // Gold
   ],
 ];
 
@@ -133,23 +139,23 @@ export function getBrahmasthanCells() {
 }
 
 /**
- * Get zone color
+ * Get zone color - Premium Golden/Yellow Palette
  */
 export function getZoneColor(zone) {
   const zoneColors = {
-    'NE': '#4169E1',  // Royal Blue - Most auspicious
-    'N': '#87CEEB',   // Sky Blue
-    'E': '#90EE90',   // Light Green
-    'SE': '#FFD700',  // Gold
-    'S': '#FFA500',   // Orange
-    'SW': '#8B4513',  // Saddle Brown - Less auspicious
-    'W': '#CD853F',   // Peru
-    'NW': '#A0522D',  // Sienna
-    'CENTER': '#FFD700', // Gold
-    'BRAHMASTHAN': '#FFA500', // Orange - Sacred center
+    'NE': '#DAA520',  // Goldenrod - Most auspicious
+    'N': '#FFC125',   // Golden Yellow
+    'E': '#FFC125',   // Golden Yellow
+    'SE': '#FFD700',  // Pure Gold
+    'S': '#FFBF00',   // Amber
+    'SW': '#F0A500',  // Honey Gold - Less auspicious
+    'W': '#FFD700',   // Gold
+    'NW': '#FFE87C',  // Light Gold
+    'CENTER': '#FFD700', // Pure Gold
+    'BRAHMASTHAN': '#FFD700', // Pure Gold - Sacred center
   };
   
-  return zoneColors[zone] || '#CCCCCC';
+  return zoneColors[zone] || '#FFE87C'; // Default to Light Gold
 }
 
 /**

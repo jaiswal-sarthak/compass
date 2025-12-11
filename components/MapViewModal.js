@@ -31,11 +31,13 @@ import {
 } from '../utils/vastuGrid';
 
 // Conditional imports for native vs web
-let MapView, Marker;
+let MapView, Marker, Polygon, Polyline;
 if (Platform.OS !== 'web') {
   const maps = require('react-native-maps');
   MapView = maps.default;
   Marker = maps.Marker;
+  Polygon = maps.Polygon;
+  Polyline = maps.Polyline;
 }
 
 const getDimensions = () => {
@@ -438,11 +440,42 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
     console.log('📌 Corner selection mode changed to:', cornerSelectionMode);
   }, [cornerSelectionMode]);
 
-  // Auto-place draggable corners - WORKS ON ALL WEB BROWSERS AND DEVICES
+  // Auto-place draggable corners - MOBILE (react-native-maps)
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      return; // Web handled separately below
+    }
+    
+    if (!mapReady || !locationToUse) {
+      return;
+    }
+    
+    // Clean up when mode is turned off
+    if (!cornerSelectionMode) {
+      setPlotCorners([]);
+      return;
+    }
+    
+    // Auto-place corners around map center
+    setTimeout(() => {
+      const center = locationToUse;
+      const offset = 0.0008;
+      const autoCorners = [
+        { latitude: center.latitude - offset, longitude: center.longitude - offset, label: 'BL', name: 'Bottom-Left' },
+        { latitude: center.latitude - offset, longitude: center.longitude + offset, label: 'BR', name: 'Bottom-Right' },
+        { latitude: center.latitude + offset, longitude: center.longitude + offset, label: 'TR', name: 'Top-Right' },
+        { latitude: center.latitude + offset, longitude: center.longitude - offset, label: 'TL', name: 'Top-Left' },
+      ];
+      
+      setPlotCorners(autoCorners);
+      console.log('🎉 Mobile corner markers initialized:', autoCorners);
+    }, 500);
+  }, [mapReady, cornerSelectionMode, locationToUse]);
+
+  // Auto-place draggable corners - WEB (Leaflet)
   useEffect(() => {
     // Only for web platform
     if (Platform.OS !== 'web') {
-      console.log('⏭️ Skipping - not web platform');
       return;
     }
     
@@ -628,9 +661,19 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
 
   // Effect to draw grid when corners are confirmed (selection mode OFF)
   useEffect(() => {
-    if (plotCorners.length === 4 && googleMapRef.current && !cornerSelectionMode) {
-      console.log('🎨 Drawing Vastu grid with corners:', plotCorners);
-      drawVastuGrid();
+    if (plotCorners.length === 4 && !cornerSelectionMode) {
+      if (Platform.OS === 'web' && googleMapRef.current) {
+        console.log('🎨 Drawing Vastu grid (web) with corners:', plotCorners);
+        drawVastuGrid();
+      } else if (Platform.OS !== 'web') {
+        // Mobile: Grid is rendered directly in MapView JSX
+        console.log('🎨 Vastu grid ready (mobile) with corners:', plotCorners);
+        console.log('📍 Polygon available:', !!Polygon, 'Polyline available:', !!Polyline);
+        console.log('📍 showVastuGrid will be set to true');
+        setShowVastuGrid(true);
+      }
+    } else {
+      setShowVastuGrid(false);
     }
   }, [plotCorners, showDevtaLabels, highlightBrahmasthan, cornerSelectionMode, language]);
 
@@ -887,6 +930,7 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
             </div>
           ) : (
             <MapView
+              ref={googleMapRef}
               style={styles.map}
               initialRegion={locationToUse}
               mapType={mapType}
@@ -895,6 +939,10 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
               showsCompass={false}
               rotateEnabled={true}
               pitchEnabled={false}
+              onMapReady={() => {
+                setMapReady(true);
+                console.log('✅ Mobile map ready');
+              }}
             >
               <Marker
                 coordinate={{
@@ -903,6 +951,142 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
                 }}
                 title={t('info.currentLocation')}
               />
+              
+              {/* Corner Markers - Mobile */}
+              {cornerSelectionMode && plotCorners.map((corner, index) => (
+                <Marker
+                  key={`corner-${index}`}
+                  coordinate={{
+                    latitude: corner.latitude,
+                    longitude: corner.longitude,
+                  }}
+                  draggable
+                  onDragEnd={(e) => {
+                    const updated = [...plotCorners];
+                    updated[index] = {
+                      latitude: e.nativeEvent.coordinate.latitude,
+                      longitude: e.nativeEvent.coordinate.longitude,
+                    };
+                    setPlotCorners(updated);
+                  }}
+                  title={`Corner ${index + 1}`}
+                  description={corner.name || `Drag to adjust`}
+                >
+                  <View style={styles.mobileCornerMarker}>
+                    <View style={styles.mobileCornerDot}>
+                      <Text style={styles.mobileCornerNumber}>{index + 1}</Text>
+                    </View>
+                  </View>
+                </Marker>
+              ))}
+              
+              {/* Plot Outline - Mobile */}
+              {cornerSelectionMode && plotCorners.length >= 2 && (
+                <Polyline
+                  coordinates={plotCorners.length === 4 
+                    ? [...plotCorners, plotCorners[0]]
+                    : plotCorners
+                  }
+                  strokeColor="#FFD700"
+                  strokeWidth={3}
+                  lineDashPattern={[8, 4]}
+                  lineCap="round"
+                />
+              )}
+              
+              {/* Vastu Grid - Mobile */}
+              {Platform.OS !== 'web' && showVastuGrid && plotCorners.length === 4 && Polygon && Polyline && (
+                <>
+                  {/* Plot outline - Make it very visible */}
+                  <Polygon
+                    coordinates={[...plotCorners, plotCorners[0]]}
+                    strokeColor="#FF6B35"
+                    fillColor="transparent"
+                    strokeWidth={5}
+                  />
+                  
+                  {/* Grid lines - 9x9 vertical - Very visible */}
+                  {Array.from({ length: 10 }).map((_, i) => {
+                    const t = i / 9;
+                    const bottomLat = plotCorners[0].latitude + (plotCorners[1].latitude - plotCorners[0].latitude) * t;
+                    const bottomLng = plotCorners[0].longitude + (plotCorners[1].longitude - plotCorners[0].longitude) * t;
+                    const topLat = plotCorners[3].latitude + (plotCorners[2].latitude - plotCorners[3].latitude) * t;
+                    const topLng = plotCorners[3].longitude + (plotCorners[2].longitude - plotCorners[3].longitude) * t;
+                    
+                    return (
+                      <Polyline
+                        key={`v-${i}`}
+                        coordinates={[
+                          { latitude: bottomLat, longitude: bottomLng },
+                          { latitude: topLat, longitude: topLng },
+                        ]}
+                        strokeColor={i % 3 === 0 ? "#FF6B35" : "#0f5257"}
+                        strokeWidth={i % 3 === 0 ? 3 : 2}
+                        lineDashPattern={i % 3 === 0 ? [] : [8, 4]}
+                      />
+                    );
+                  })}
+                  
+                  {/* Grid lines - 9x9 horizontal - Very visible */}
+                  {Array.from({ length: 10 }).map((_, i) => {
+                    const t = i / 9;
+                    const leftLat = plotCorners[0].latitude + (plotCorners[3].latitude - plotCorners[0].latitude) * t;
+                    const leftLng = plotCorners[0].longitude + (plotCorners[3].longitude - plotCorners[0].longitude) * t;
+                    const rightLat = plotCorners[1].latitude + (plotCorners[2].latitude - plotCorners[1].latitude) * t;
+                    const rightLng = plotCorners[1].longitude + (plotCorners[2].longitude - plotCorners[1].longitude) * t;
+                    
+                    return (
+                      <Polyline
+                        key={`h-${i}`}
+                        coordinates={[
+                          { latitude: leftLat, longitude: leftLng },
+                          { latitude: rightLat, longitude: rightLng },
+                        ]}
+                        strokeColor={i % 3 === 0 ? "#FF6B35" : "#0f5257"}
+                        strokeWidth={i % 3 === 0 ? 3 : 2}
+                        lineDashPattern={i % 3 === 0 ? [] : [8, 4]}
+                      />
+                    );
+                  })}
+                  
+                  {/* Cell boundaries - Draw 3x3 main grid cells for better visibility */}
+                  {Array.from({ length: 3 }).map((_, row) => 
+                    Array.from({ length: 3 }).map((_, col) => {
+                      const rowStart = row / 3;
+                      const rowEnd = (row + 1) / 3;
+                      const colStart = col / 3;
+                      const colEnd = (col + 1) / 3;
+                      
+                      const blLat = plotCorners[0].latitude + (plotCorners[1].latitude - plotCorners[0].latitude) * colStart + (plotCorners[3].latitude - plotCorners[0].latitude) * rowStart;
+                      const blLng = plotCorners[0].longitude + (plotCorners[1].longitude - plotCorners[0].longitude) * colStart + (plotCorners[3].longitude - plotCorners[0].longitude) * rowStart;
+                      
+                      const brLat = plotCorners[0].latitude + (plotCorners[1].latitude - plotCorners[0].latitude) * colEnd + (plotCorners[3].latitude - plotCorners[0].latitude) * rowStart;
+                      const brLng = plotCorners[0].longitude + (plotCorners[1].longitude - plotCorners[0].longitude) * colEnd + (plotCorners[3].longitude - plotCorners[0].longitude) * rowStart;
+                      
+                      const trLat = plotCorners[0].latitude + (plotCorners[1].latitude - plotCorners[0].latitude) * colEnd + (plotCorners[3].latitude - plotCorners[0].latitude) * rowEnd;
+                      const trLng = plotCorners[0].longitude + (plotCorners[1].longitude - plotCorners[0].longitude) * colEnd + (plotCorners[3].longitude - plotCorners[0].longitude) * rowEnd;
+                      
+                      const tlLat = plotCorners[0].latitude + (plotCorners[1].latitude - plotCorners[0].latitude) * colStart + (plotCorners[3].latitude - plotCorners[0].latitude) * rowEnd;
+                      const tlLng = plotCorners[0].longitude + (plotCorners[1].longitude - plotCorners[0].longitude) * colStart + (plotCorners[3].longitude - plotCorners[0].longitude) * rowEnd;
+                      
+                      return (
+                        <Polygon
+                          key={`cell-${row}-${col}`}
+                          coordinates={[
+                            { latitude: blLat, longitude: blLng },
+                            { latitude: brLat, longitude: brLng },
+                            { latitude: trLat, longitude: trLng },
+                            { latitude: tlLat, longitude: tlLng },
+                          ]}
+                          strokeColor="#FF6B35"
+                          fillColor="rgba(255, 107, 53, 0.1)"
+                          strokeWidth={3}
+                        />
+                      );
+                    })
+                  )}
+                </>
+              )}
             </MapView>
           )
         ) : (
@@ -1319,6 +1503,33 @@ const styles = StyleSheet.create({
     fontSize: getResponsiveFont(16),
     color: '#8B7355',
     fontWeight: '600',
+  },
+  mobileCornerMarker: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mobileCornerDot: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#FF0000',
+    borderWidth: 6,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#FF0000',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  mobileCornerNumber: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '900',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   compassOverlay: {
     position: 'absolute',
