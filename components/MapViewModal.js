@@ -664,7 +664,7 @@ export default function MapViewModal({ visible, onClose, mode, compassType, sele
     if (plotCorners.length === 4 && !cornerSelectionMode) {
       if (Platform.OS === 'web' && googleMapRef.current) {
         console.log('🎨 Drawing Vastu grid (web) with corners:', plotCorners);
-        drawVastuGrid();
+      drawVastuGrid();
       } else if (Platform.OS !== 'web') {
         // Mobile: Grid is rendered directly in MapView JSX
         console.log('🎨 Vastu grid ready (mobile) with corners:', plotCorners);

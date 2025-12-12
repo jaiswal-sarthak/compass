@@ -129,8 +129,8 @@ export default function CompassView({
   const [webPermissionGranted, setWebPermissionGranted] = useState(false);
   const [showCalibration, setShowCalibration] = useState(true);
 
-  // Filters for smooth readings - more aggressive smoothing for stability
-  const headingFilter = useRef(new LowPassFilter(0.08)); // Reduced from 0.15 for more stability
+  // Filters for smooth readings - optimized for maximum stability (like professional compasses)
+  const headingFilter = useRef(new LowPassFilter(0.12)); // Lower alpha = more smoothing = more stability
   const deviceInfo = useRef(getDeviceInfo());
   
   // Stability tracking
@@ -142,13 +142,16 @@ export default function CompassView({
   const lastOrientationData = useRef({ beta: 0, gamma: 0, timestamp: 0 });
   const isDeviceMoving = useRef(false);
   const accelData = useRef({ x: 0, y: 0, z: 0 }); // Accelerometer data for tilt compensation
+  const [isCompassStable, setIsCompassStable] = useState(false); // UI state for stability indicator
   
-  // Configuration - improved for stability
-  const DEAD_ZONE_THRESHOLD = 1.5; // Degrees - increased from 0.5 for more stability
-  const STABILITY_TIME = 2000; // ms - time device must be stable before freezing
-  const MOVEMENT_THRESHOLD = 0.15; // m/s² - increased threshold for movement detection
+  // Configuration - optimized for maximum stability (professional compass behavior)
+  const DEAD_ZONE_THRESHOLD = 2.0; // Degrees - increased significantly to ignore tiny movements
+  const STABILITY_TIME = 2500; // ms - longer time before considering stable
+  const MOVEMENT_THRESHOLD = 0.4; // m/s² - higher threshold to ignore slight movements
   const HIGH_CONFIDENCE_THRESHOLD = 0.8; // Confidence level considered "high"
-  const MIN_UPDATE_INTERVAL = 100; // ms - minimum time between updates
+  const MIN_UPDATE_INTERVAL = 80; // ms - slightly slower updates for stability
+  const STATIONARY_ACCEL_THRESHOLD = 0.5; // m/s² - higher threshold for stationary detection
+  const MIN_MOVEMENT_ANGLE = 3.0; // Degrees - minimum angle change to consider as movement
   
   const MIN_SIZE = COMPASS_SIZE * 1.0;
   const MAX_SIZE = COMPASS_SIZE * 1.3;
@@ -176,6 +179,7 @@ export default function CompassView({
   }, []);
 
   // Check if heading should be updated based on movement, confidence, and dead zone
+  // Optimized for maximum stability - ignores very slight movements like professional compasses
   const shouldUpdateHeading = (newHeading, confidence, timestamp) => {
     // If no previous heading, always update
     if (lastStableHeading.current === null) {
@@ -192,16 +196,27 @@ export default function CompassView({
     let diff = Math.abs(newHeading - lastStableHeading.current);
     if (diff > 180) diff = 360 - diff;
     
-    // If confidence is low, be more lenient with updates
+    // If confidence is low, be slightly more lenient but still stable
     const effectiveThreshold = confidence && confidence < HIGH_CONFIDENCE_THRESHOLD 
       ? DEAD_ZONE_THRESHOLD * 0.7  // Slightly lower threshold when confidence is low
       : DEAD_ZONE_THRESHOLD;
     
-    // If change is below dead zone threshold, check if device is moving
+    // If device is clearly moving (significant movement), allow updates
+    if (isDeviceMoving.current && diff >= MIN_MOVEMENT_ANGLE) {
+      isStable.current = false;
+      setIsCompassStable(false);
+      if (stabilityTimer.current) {
+        clearTimeout(stabilityTimer.current);
+        stabilityTimer.current = null;
+      }
+      // Only allow updates for significant changes when moving
+      return diff >= MIN_MOVEMENT_ANGLE;
+    }
+    
+    // Device appears stationary or movement is very slight
     if (diff < effectiveThreshold) {
-      // Device appears stationary - check if we should freeze updates
+      // Very small change when stationary - freeze updates completely when stable
       if (confidence && confidence >= HIGH_CONFIDENCE_THRESHOLD && !isDeviceMoving.current) {
-        // High confidence + no movement + small change = prepare to freeze updates
         // Clear any existing stability timer
         if (stabilityTimer.current) {
           clearTimeout(stabilityTimer.current);
@@ -210,29 +225,35 @@ export default function CompassView({
         // Set timer to mark device as stable after stability period
         stabilityTimer.current = setTimeout(() => {
           isStable.current = true; // Device has been stable - freeze updates
+          setIsCompassStable(true); // Update UI state
         }, STABILITY_TIME);
         
-        // If already stable, don't update unless movement detected
+        // If already stable, completely ignore tiny movements (professional compass behavior)
         if (isStable.current) {
-          return false; // Don't update - device is stable
+          return diff >= effectiveThreshold * 2.5; // Only update for very significant changes when stable
         }
         
-        // Not yet stable, but preparing - be more restrictive
-        return diff >= effectiveThreshold * 0.5; // Increased from 0.2
+        // Not yet stable - be very restrictive with updates
+        return diff >= effectiveThreshold * 0.8;
       }
       
-      // Low confidence or device moving - allow small updates but still filter
-      return diff >= effectiveThreshold * 0.5; // Increased from 0.3
+      // Low confidence or slight movement - be restrictive
+      return diff >= effectiveThreshold * 0.7;
     }
     
     // Significant change detected - clear stability state and timer
-    isStable.current = false;
-    if (stabilityTimer.current) {
-      clearTimeout(stabilityTimer.current);
-      stabilityTimer.current = null;
+    if (diff >= MIN_MOVEMENT_ANGLE) {
+      isStable.current = false;
+      setIsCompassStable(false);
+      if (stabilityTimer.current) {
+        clearTimeout(stabilityTimer.current);
+        stabilityTimer.current = null;
+      }
+      return true;
     }
     
-    return true;
+    // Change is between threshold and min movement - be cautious
+    return diff >= effectiveThreshold * 1.2;
   };
   
   // Universal compass heading calculation using device magnetometer with tilt compensation
@@ -392,7 +413,13 @@ export default function CompassView({
             
             // Update movement status (threshold in degrees per second)
             const changeRate = orientationChange / timeDelta;
-            isDeviceMoving.current = changeRate > 2.0; // 2 degrees/second threshold
+            // Use strong hysteresis to prevent rapid toggling and ignore tiny movements
+            if (changeRate > 4.0) {
+              isDeviceMoving.current = true; // Definitely moving
+            } else if (changeRate < 1.0) {
+              isDeviceMoving.current = false; // Definitely stationary
+            }
+            // Between 1.0-4.0: keep current state (strong hysteresis prevents jitter)
             
             // If device starts moving, clear stability state
             if (isDeviceMoving.current) {
@@ -455,9 +482,9 @@ export default function CompassView({
           // Apply smoothing (more aggressive for all devices)
           let smoothed;
           if (device.isPixel) {
-            // Extra smoothing for Pixel to prevent jitter
+            // Extra smoothing for Pixel to prevent jitter (maximum stability)
             if (!headingFilter.current.pixelFilter) {
-              headingFilter.current.pixelFilter = new LowPassFilter(0.06);
+              headingFilter.current.pixelFilter = new LowPassFilter(0.1);
             }
             smoothed = headingFilter.current.pixelFilter.filter(angle);
           } else {
@@ -470,9 +497,9 @@ export default function CompassView({
           if (shouldUpdate) {
             setHeading(smoothed);
             rotation.value = withSpring(-smoothed, { 
-              damping: device.isPixel ? 40 : 35,  // Increased damping for more stability
-              stiffness: device.isPixel ? 60 : 70, // Reduced stiffness for smoother motion
-              mass: 0.8  // Increased mass for more inertia
+              damping: device.isPixel ? 45 : 40,  // Higher damping for stability
+              stiffness: device.isPixel ? 80 : 90, // Lower stiffness for smoother, more stable motion
+              mass: 1.0  // Higher mass for more inertia, less jitter
             });
             
             if (onHeadingChange) {
@@ -513,7 +540,7 @@ export default function CompassView({
       try {
         const isAvailable = await Accelerometer.isAvailableAsync();
         if (isAvailable) {
-          Accelerometer.setUpdateInterval(100); // Match magnetometer rate for synchronized tilt compensation
+          Accelerometer.setUpdateInterval(100); // Balanced update rate for stability
           
            accelerometerSubscription = Accelerometer.addListener((data) => {
              const { x, y, z } = data;
@@ -530,15 +557,31 @@ export default function CompassView({
              // Calculate change in acceleration (jerk) to detect movement
              const lastAccel = lastAccelData.current;
              const timeDelta = (now - lastAccel.timestamp) / 1000; // seconds
-             const accelDelta = Math.abs(accel - Math.sqrt(
-               lastAccel.x * lastAccel.x + 
-               lastAccel.y * lastAccel.y + 
-               lastAccel.z * lastAccel.z
-             ));
              
-             // Update movement status
-             isDeviceMoving.current = accelDelta > MOVEMENT_THRESHOLD || 
-               Math.abs(accel - 9.81) > 0.5; // Significant deviation from gravity
+             if (timeDelta > 0 && lastAccel.timestamp > 0) {
+               const accelDelta = Math.abs(accel - Math.sqrt(
+                 lastAccel.x * lastAccel.x + 
+                 lastAccel.y * lastAccel.y + 
+                 lastAccel.z * lastAccel.z
+               ));
+               
+               // Calculate rate of change (jerk)
+               const jerk = accelDelta / timeDelta;
+               
+               // More accurate movement detection - check both jerk and deviation from gravity
+               const gravityDeviation = Math.abs(accel - 9.81);
+               const isMoving = jerk > MOVEMENT_THRESHOLD || gravityDeviation > STATIONARY_ACCEL_THRESHOLD;
+               
+               // Use strong hysteresis to prevent rapid toggling and ignore tiny movements
+               if (isMoving && (jerk > MOVEMENT_THRESHOLD * 1.3 || gravityDeviation > STATIONARY_ACCEL_THRESHOLD * 1.3)) {
+                 // Only mark as moving if significantly above threshold
+                 isDeviceMoving.current = true;
+               } else if (jerk < MOVEMENT_THRESHOLD * 0.4 && gravityDeviation < STATIONARY_ACCEL_THRESHOLD * 0.5) {
+                 // Only mark as stationary if well below threshold (strong hysteresis)
+                 isDeviceMoving.current = false;
+               }
+               // Between thresholds: keep current state (prevents jitter)
+             }
              
              lastAccelData.current = { x, y, z, timestamp: now };
              
@@ -568,8 +611,8 @@ export default function CompassView({
           return;
         }
 
-        // Set update interval (slower for stability)
-        const updateInterval = deviceInfo.current.isPixel ? 200 : 150; // Slower updates for more stability
+        // Set update interval (optimized for stability)
+        const updateInterval = deviceInfo.current.isPixel ? 150 : 120; // Slower updates for more stability
         Magnetometer.setUpdateInterval(updateInterval);
 
         magnetometerSubscription = Magnetometer.addListener((data) => {
@@ -589,9 +632,9 @@ export default function CompassView({
           if (shouldUpdate) {
             setHeading(angle);
             rotation.value = withSpring(-angle, { 
-              damping: 35,  // Increased damping for more stability
-              stiffness: 70, // Reduced stiffness for smoother motion
-              mass: 0.8  // Increased mass for more inertia
+              damping: 40,  // Higher damping for stability
+              stiffness: 90, // Lower stiffness for smoother, more stable motion
+              mass: 1.0  // Higher mass for more inertia, less jitter
             });
             
             if (onHeadingChange) {
@@ -743,11 +786,22 @@ export default function CompassView({
         </View>
       )}
       
-      {/* Heading indicator */}
+      {/* Enhanced Heading indicator */}
       <View style={styles.headingIndicator}>
         <View style={styles.headingLine} />
         <View style={styles.headingDot} />
+        <View style={styles.headingArrow} />
       </View>
+      
+      {/* Stability indicator */}
+      {isCompassStable && (
+        <View style={styles.stabilityIndicator}>
+          <View style={styles.stabilityIcon}>
+            <Text style={styles.stabilityIconText}>🔒</Text>
+          </View>
+          <Text style={styles.stabilityText}>Locked</Text>
+        </View>
+      )}
       
       {/* Calibration banner - hidden in capture mode */}
       {showCalibration && !hideCalibration && (
@@ -805,34 +859,92 @@ const styles = StyleSheet.create({
   },
   headingIndicator: {
     position: 'absolute',
-    top: 0,
-    width: 5,
-    height: 35,
+    top: -getResponsiveSize(8),
+    width: getResponsiveSize(6),
+    height: getResponsiveSize(45),
     backgroundColor: '#F4C430',
-    borderRadius: 3,
+    borderRadius: getResponsiveSize(3),
     zIndex: 1000,
     shadowColor: '#F4C430',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 10,
-    borderWidth: 1,
+    shadowOpacity: 0.95,
+    shadowRadius: 12,
+    borderWidth: 2,
     borderColor: '#FFD700',
     alignSelf: 'center',
+    elevation: 15,
   },
   headingLine: {
-    width: 3,
-    height: 25,
+    width: getResponsiveSize(4),
+    height: getResponsiveSize(30),
     backgroundColor: '#FFD700',
+    alignSelf: 'center',
+    marginTop: getResponsiveSize(2),
+    borderRadius: getResponsiveSize(2),
   },
   headingDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: getResponsiveSize(8),
+    height: getResponsiveSize(8),
+    borderRadius: getResponsiveSize(4),
     backgroundColor: '#FFD700',
-    marginTop: -3,
+    marginTop: getResponsiveSize(-4),
     alignSelf: 'center',
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  headingArrow: {
+    position: 'absolute',
+    top: getResponsiveSize(-12),
+    left: '50%',
+    marginLeft: getResponsiveSize(-6),
+    width: 0,
+    height: 0,
+    borderLeftWidth: getResponsiveSize(6),
+    borderRightWidth: getResponsiveSize(6),
+    borderBottomWidth: getResponsiveSize(8),
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: '#F4C430',
+    shadowColor: '#F4C430',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
+  },
+  stabilityIndicator: {
+    position: 'absolute',
+    bottom: getResponsiveSize(-60),
+    left: '50%',
+    marginLeft: getResponsiveSize(-50),
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 150, 15, 0.95)',
+    paddingVertical: getResponsiveSize(6),
+    paddingHorizontal: getResponsiveSize(12),
+    borderRadius: getResponsiveSize(20),
+    borderWidth: 2,
+    borderColor: '#00FF00',
+    shadowColor: '#00FF00',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
+    elevation: 8,
+    zIndex: 999,
+  },
+  stabilityIcon: {
+    marginRight: getResponsiveSize(6),
+  },
+  stabilityIconText: {
+    fontSize: getResponsiveFont(14),
+  },
+  stabilityText: {
+    color: '#FFFFFF',
+    fontSize: getResponsiveFont(12),
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   clearImageButton: {
     position: 'absolute',
